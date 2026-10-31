@@ -1,4 +1,5 @@
 #include "PluginProcessor.h"
+#include "PluginEditor.h"
 
 CamelPhatAudioProcessor::CamelPhatAudioProcessor()
     : AudioProcessor(BusesProperties()
@@ -318,7 +319,7 @@ bool CamelPhatAudioProcessor::hasEditor() const
 
 juce::AudioProcessorEditor* CamelPhatAudioProcessor::createEditor()
 {
-    return new juce::GenericAudioProcessorEditor(*this);
+    return new CamelPhatAudioProcessorEditor(*this);
 }
 
 void CamelPhatAudioProcessor::getStateInformation(juce::MemoryBlock& destData)

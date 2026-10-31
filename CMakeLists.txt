@@ -37,6 +37,21 @@ target_sources(CamelPhat
     PRIVATE
         Source/PluginProcessor.cpp
         Source/PluginProcessor.h
+        Source/PluginEditor.cpp
+        Source/PluginEditor.h
+        Source/Parameters.h
+        Source/DSP/IDSPModule.h
+        Source/DSP/BPFilter.h
+        Source/DSP/DistortionModule.h
+        Source/DSP/MMFilter.h
+        Source/DSP/FlangerModule.h
+        Source/DSP/MagicEQ.h
+        Source/DSP/CompressorModule.h
+        Source/DSP/MasterSection.h
+        Source/UI/CamelPhatLookAndFeel.cpp
+        Source/UI/CamelPhatLookAndFeel.h
+        Source/UI/XYPadComponent.cpp
+        Source/UI/XYPadComponent.h
 )
 
 target_include_directories(CamelPhat PRIVATE Source)
