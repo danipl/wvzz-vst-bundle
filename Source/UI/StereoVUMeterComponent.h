@@ -15,8 +15,8 @@ class StereoVUMeterComponent : public juce::Component,
                                private juce::Timer
 {
 public:
-    explicit StereoVUMeterComponent(const dsp::IMeterSource& meterSource)
-        : source(meterSource)
+    explicit StereoVUMeterComponent(const dsp::IMeterSource& meterSource, juce::String meterLabel = {})
+        : source(meterSource), label(std::move(meterLabel))
     {
         startTimerHz(60);
     }
@@ -35,6 +35,14 @@ public:
         g.fillRoundedRectangle(bounds, 4.0f);
         g.setColour(juce::Colour(0xff21262d));
         g.drawRoundedRectangle(bounds, 4.0f, 1.0f);
+
+        if (label.isNotEmpty())
+        {
+            auto labelArea = bounds.removeFromBottom(12.0f);
+            g.setColour(juce::Colour(0xff8b949e));
+            g.setFont(juce::FontOptions(8.5f, juce::Font::bold));
+            g.drawText(label, labelArea, juce::Justification::centred, false);
+        }
 
         auto inner = bounds.reduced(3.0f);
         float channelWidth = (inner.getWidth() - 2.0f) * 0.5f;
@@ -121,6 +129,7 @@ private:
     }
 
     const dsp::IMeterSource& source;
+    juce::String label;
 
     float currentPeakLeft  { 0.0f };
     float currentPeakRight { 0.0f };

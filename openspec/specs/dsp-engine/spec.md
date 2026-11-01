@@ -6,7 +6,7 @@ Defines the real-time audio digital signal processing pipeline recreating the Ca
 ## Requirements
 
 ### Requirement: Band-Pass Splitter Routing
-The DSP engine SHALL split incoming stereo audio into a Passband signal and a Rejected Band signal using two 12 dB/oct (2-pole) Cytomic zero-delay feedback (ZDF) trapezoidal State Variable Filters (one High-Pass at `bp_low_cut` with `bp_low_res`, one Low-Pass at `bp_high_cut` with `bp_high_res`, Q mapped `0.707` to `12.0`), where `Low_Rejected = LowPass_Output(Input, bp_low_cut, bp_low_res)`, `High_Rejected = HighPass_Output(Input, bp_high_cut, bp_high_res)`, `Passband = BandPass_Cascade(Input)`, and `bp_link` locks the logarithmic frequency delta between `bp_low_cut` and `bp_high_cut`.
+The DSP engine SHALL split incoming stereo audio into a Passband signal and a Rejected Band signal using two 12 dB/oct (2-pole) Cytomic zero-delay feedback (ZDF) trapezoidal State Variable Filters (one High-Pass at `bp_low_cut` with `bp_low_res`, one Low-Pass at `bp_high_cut` with `bp_high_res`, Q mapped `0.707` to `12.0`), where `Low_Rejected = LowPass_Output(Input, bp_low_cut, bp_low_res)`, `High_Rejected = HighPass_Output(Input, bp_high_cut, bp_high_res)`, `Passband = BandPass_Cascade(Input)`, and `bp_link` locks the logarithmic frequency delta between `bp_low_cut` and `bp_high_cut`. The engine and parameter controls SHALL enforce that `bp_low_cut` never exceeds `bp_high_cut` ($f_{\text{low}} \le f_{\text{high}}$), and companion parameter synchronization under `bp_link` SHALL NOT invoke host parameter notifications from the real-time audio thread.
 
 #### Scenario: Audio band splitting
 - **WHEN** audio is processed through the BP Filter splitter with `bp_bypass = 0`
@@ -14,7 +14,11 @@ The DSP engine SHALL split incoming stereo audio into a Passband signal and a Re
 
 #### Scenario: Linked cutoff movement
 - **WHEN** `bp_link` is enabled (`1`) and either `bp_low_cut` or `bp_high_cut` is adjusted
-- **THEN** the companion cutoff updates automatically to preserve the logarithmic frequency ratio within `[20.0 Hz, 20000.0 Hz]`
+- **THEN** the companion cutoff updates automatically to preserve the logarithmic frequency ratio within `[20.0 Hz, 20000.0 Hz]` without audio-thread host notification calls
+
+#### Scenario: Cutoff boundary clamping prevents crossover
+- **WHEN** user or automation adjusts `bp_low_cut` upward toward `bp_high_cut` or `bp_high_cut` downward toward `bp_low_cut`
+- **THEN** the values are clamped such that `bp_low_cut` does not exceed `bp_high_cut`, preventing passband silencing and out-of-band double summation
 
 ### Requirement: 4-Stage Oversampled Distortion
 The system SHALL process the passband audio through 4 distortion circuits (`Mech`, `Tube`, `Bitcrusher`, and `Xcita`) where `Bitcrusher` applies amplitude quantization (`16-bit` to `4-bit`) and sample-and-hold decimation (`1x` to `32x`) at the base sample rate before upsampling, and `Mech` (`1.2 kHz` +6 dB Q=1.0 pre-emphasis, asymmetric transfer `(x >= 0) ? tanh(drive * x) + 0.15 * sin(drive * x * pi) : clamp(drive * 1.2 * x, -0.9, 0.0)`, post-de-emphasis, exp drive `1.0`–`25.0`), `Tube` (`tanh(drive * x + 0.1 * x^2) - tanh(0.1 * x^2)` with DC blocker, exp drive `1.0`–`15.0`), and `Xcita` (`2.8 kHz` 2-pole Butterworth HPF, `tanh(drive * (0.7 * x_hf + 0.3 * abs(x_hf)))`, `10 Hz` DC blocker) run inside a 4x polyphase IIR/FIR oversampling block.
@@ -82,3 +86,10 @@ The system SHALL provide a smart randomizer trigger (`Dice`) that randomizes syn
 #### Scenario: User triggers Dice randomizer
 - **WHEN** the Dice randomizer is triggered
 - **THEN** effect parameters randomize to a new musical configuration with `master_vol` fixed at `0.0 dB`, `master_mix` within `[0.4, 1.0]`, and at most one filter bank exceeding `0.75` resonance
+
+### Requirement: Stereo Input Signal Level Metering
+The DSP engine SHALL provide lock-free atomic stereo peak and RMS level metering (`IMeterSource`) tapped immediately after the `input_gain` stage before the audio enters the BP filter splitter.
+
+#### Scenario: Input level monitoring during playback
+- **WHEN** audio is received at the plugin input
+- **THEN** peak and RMS levels for left and right channels are computed after input gain and stored in lock-free atomic variables accessible to the UI at up to 60 FPS

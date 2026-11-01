@@ -14,6 +14,80 @@
 #include "DSP/ModulationEngine.h"
 #include "Presets/FactoryPresets.h"
 
+class InputMeterSource : public camelphat::dsp::IMeterSource
+{
+public:
+    InputMeterSource() = default;
+    ~InputMeterSource() override = default;
+
+    void reset() noexcept
+    {
+        peakLeft.store(0.0f, std::memory_order_relaxed);
+        peakRight.store(0.0f, std::memory_order_relaxed);
+        rmsLeft.store(0.0f, std::memory_order_relaxed);
+        rmsRight.store(0.0f, std::memory_order_relaxed);
+    }
+
+    void update(const juce::AudioBuffer<float>& buffer, int numSamples) noexcept
+    {
+        if (numSamples <= 0 || buffer.getNumChannels() == 0)
+            return;
+
+        const float* inL = buffer.getReadPointer(0);
+        const float* inR = buffer.getNumChannels() > 1 ? buffer.getReadPointer(1) : inL;
+
+        float blockPeakL = 0.0f;
+        float blockPeakR = 0.0f;
+        float blockSumSqL = 0.0f;
+        float blockSumSqR = 0.0f;
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            const float sL = inL[i];
+            const float sR = inR[i];
+            const float aL = std::abs(sL);
+            const float aR = std::abs(sR);
+            blockPeakL = juce::jmax(blockPeakL, aL);
+            blockPeakR = juce::jmax(blockPeakR, aR);
+            blockSumSqL += sL * sL;
+            blockSumSqR += sR * sR;
+        }
+
+        const float blockRmsL = std::sqrt(blockSumSqL / static_cast<float>(numSamples));
+        const float blockRmsR = std::sqrt(blockSumSqR / static_cast<float>(numSamples));
+
+        updateMeter(peakLeft, blockPeakL);
+        updateMeter(peakRight, blockPeakR);
+        updateMeter(rmsLeft, blockRmsL);
+        updateMeter(rmsRight, blockRmsR);
+    }
+
+    [[nodiscard]] float getPeakLevel(int channel) const noexcept override
+    {
+        return (channel == 0) ? peakLeft.load(std::memory_order_relaxed)
+                               : peakRight.load(std::memory_order_relaxed);
+    }
+
+    [[nodiscard]] float getRmsLevel(int channel) const noexcept override
+    {
+        return (channel == 0) ? rmsLeft.load(std::memory_order_relaxed)
+                               : rmsRight.load(std::memory_order_relaxed);
+    }
+
+private:
+    static inline void updateMeter(std::atomic<float>& target, float newBlockValue) noexcept
+    {
+        const float current = target.load(std::memory_order_relaxed);
+        const float updated = (newBlockValue > current) ? newBlockValue : (current * 0.85f + newBlockValue * 0.15f);
+        target.store(updated, std::memory_order_relaxed);
+    }
+
+    std::atomic<float> peakLeft  { 0.0f };
+    std::atomic<float> peakRight { 0.0f };
+    std::atomic<float> rmsLeft   { 0.0f };
+    std::atomic<float> rmsRight  { 0.0f };
+};
+
 class CamelPhatAudioProcessor : public juce::AudioProcessor
 {
 public:
@@ -49,6 +123,7 @@ public:
     juce::AudioProcessorValueTreeState& getAPVTS() noexcept { return apvts; }
     const camelphat::ParameterPointers& getParameters() const noexcept { return paramPointers; }
     const camelphat::dsp::MasterSection& getMasterSection() const noexcept { return masterSection; }
+    const camelphat::dsp::IMeterSource& getInputMeterSource() const noexcept { return inputMeterSource; }
     const camelphat::dsp::CompressorModule& getCompressorModule() const noexcept { return compressorModule; }
     camelphat::dsp::ModulationEngine& getModulationEngine() noexcept { return modEngine; }
 
@@ -71,6 +146,7 @@ private:
     camelphat::dsp::CompressorModule compressorModule;
     camelphat::dsp::MasterSection    masterSection;
     camelphat::dsp::ModulationEngine modEngine;
+    InputMeterSource                 inputMeterSource;
 
     int currentProgramIndex { 0 };
 
@@ -109,11 +185,6 @@ private:
 
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> masterMixSmoothed;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> masterVolSmoothed;
-
-    // bp_link tracking
-    std::atomic<bool> isUpdatingLink { false };
-    float lastLowCut { 20.0f };
-    float lastHighCut { 20000.0f };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(CamelPhatAudioProcessor)
 };

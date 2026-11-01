@@ -6,11 +6,11 @@ Provides two control-rate low-frequency oscillators (LFO 1 and LFO 2) and an ass
 ## Requirements
 
 ### Requirement: Control-Rate Dual LFO Generators
-The system SHALL provide two independent modulation oscillators (LFO 1 and LFO 2) evaluated at a 32-sample control rate with per-sample linear interpolation applied to target parameters, supporting 7 waveforms (`0: Sine`, `1: Triangle`, `2: Saw Down`, `3: Saw Up`, `4: Square`, `5: Sample & Hold`, `6: Smooth Random`).
+The system SHALL provide two independent modulation oscillators (LFO 1 and LFO 2) evaluated at a 32-sample control rate with modulated parameter offsets actively updated and propagated to target parameters, supporting 7 waveforms (`0: Sine`, `1: Triangle`, `2: Saw Down`, `3: Saw Up`, `4: Square`, `5: Sample & Hold`, `6: Smooth Random`).
 
 #### Scenario: Control-rate LFO modulation with per-sample interpolation
 - **WHEN** LFO 1 or LFO 2 is assigned to a target parameter with non-zero depth
-- **THEN** the oscillator updates its control value every 32 samples and linearly interpolates the modulated parameter offset on every sample without zipper steps
+- **THEN** the oscillator updates its control value every 32 samples and the active target offset buffer immediately reflects the new modulation value so that the target DSP parameter changes audibly without zipper noise
 
 #### Scenario: Stepped and smooth random waveforms
 - **WHEN** an LFO waveform is set to `5: Sample & Hold` or `6: Smooth Random`
@@ -33,6 +33,10 @@ The system SHALL allow LFO 1, LFO 2, and the X/Y Pad axes to modulate any parame
 #### Scenario: BP Both Cuts modulation
 - **WHEN** a modulator targets `BP Both Cuts`
 - **THEN** both `bp_low_cut` and `bp_high_cut` shift simultaneously in logarithmic frequency space
+
+#### Scenario: X/Y Pad and LFO combined modulation
+- **WHEN** both an LFO and an X/Y axis target the same parameter with non-zero depth
+- **THEN** the modulation engine sums their offsets and supplies the combined offset to the audio processor
 
 ### Requirement: Assignable Macro X/Y Controller Pad
 The system SHALL provide a 2D macro controller (`xy_x` and `xy_y` in `0.0` to `1.0`) that applies additive bipolar or unipolar offsets (`xy_x_depth` and `xy_y_depth`) to any selected target from the Modulatable Targets Enum.

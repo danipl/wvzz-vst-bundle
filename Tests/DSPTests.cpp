@@ -259,6 +259,26 @@ static void testBandRejectRecombination()
     assert(passBuffer.getMagnitude(0, 512) > 0.01f && "Passband contains signal");
     assert(rejBuffer.getMagnitude(0, 512) >= 0.0f && "Band-reject contains out-of-band signal");
 
+    // Test Boundary Clamping: Equal Cutoffs (1000 Hz, 1000 Hz)
+    passBuffer.clear();
+    rejBuffer.clear();
+    bpFilter.process(inBuffer, passBuffer, rejBuffer, 1000.0f, 1000.0f, 0.5f, 0.5f, false);
+    for (int i = 0; i < 512; ++i)
+    {
+        assert(std::isfinite(passBuffer.getSample(0, i)) && "Passband sample must be finite at equal cutoffs");
+        assert(std::isfinite(rejBuffer.getSample(0, i)) && "Reject sample must be finite at equal cutoffs");
+    }
+
+    // Test Inverted Cutoffs: Low Cut (5000 Hz) > High Cut (500 Hz)
+    passBuffer.clear();
+    rejBuffer.clear();
+    bpFilter.process(inBuffer, passBuffer, rejBuffer, 5000.0f, 500.0f, 0.5f, 0.5f, false);
+    for (int i = 0; i < 512; ++i)
+    {
+        assert(std::isfinite(passBuffer.getSample(0, i)) && "Passband sample must be finite when cutoffs are inverted");
+        assert(std::isfinite(rejBuffer.getSample(0, i)) && "Reject sample must be finite when cutoffs are inverted");
+    }
+
     std::cout << "  -> PASS: BP Filter split generates valid passband and complementary band-reject audio.\n" << std::endl;
 }
 
@@ -387,6 +407,93 @@ static void testEditorLayoutAndNonOverlap()
     std::cout << "  -> PASS: Editor instantiates and scales across 810x510, 1080x680, and 1920x1200 with valid child geometry.\n" << std::endl;
 }
 
+// ==============================================================================
+// Test 10: Modulation Engine Target Delivery Verification
+// ==============================================================================
+static void testModulationTargetDelivery()
+{
+    std::cout << "[Test 10] Running Modulation Engine Target Delivery Verification..." << std::endl;
+
+    CamelPhatAudioProcessor processor;
+    processor.prepareToPlay(44100.0, 512);
+
+    auto& apvts = processor.getAPVTS();
+    auto* lfo1Target = apvts.getParameter(camelphat::ParameterIDs::lfo1Target);
+    auto* lfo1Depth  = apvts.getParameter(camelphat::ParameterIDs::lfo1Depth);
+    auto* lfo1Rate   = apvts.getParameter(camelphat::ParameterIDs::lfo1Rate);
+    assert(lfo1Target != nullptr && lfo1Depth != nullptr && lfo1Rate != nullptr);
+
+    // Target DistMech (index 7 in ModTarget enum)
+    const int distMechIdx = static_cast<int>(camelphat::ModTarget::DistMech);
+    lfo1Target->setValueNotifyingHost(lfo1Target->convertTo0to1(static_cast<float>(distMechIdx)));
+    lfo1Depth->setValueNotifyingHost(lfo1Depth->convertTo0to1(1.0f));
+    lfo1Rate->setValueNotifyingHost(lfo1Rate->convertTo0to1(5.0f));
+
+    juce::AudioBuffer<float> buffer(2, 512);
+    buffer.clear();
+    juce::MidiBuffer midi;
+
+    // Process several blocks to advance LFO
+    bool nonZeroLfoOffsetObserved = false;
+    for (int b = 0; b < 10; ++b)
+    {
+        processor.processBlock(buffer, midi);
+        float offset = processor.getModulationEngine().getOffset(camelphat::ModTarget::DistMech);
+        if (std::abs(offset) > 0.01f)
+            nonZeroLfoOffsetObserved = true;
+    }
+    assert(nonZeroLfoOffsetObserved && "ModulationEngine must deliver non-zero offset to DistMech target");
+
+    // Test XY Pad target delivery
+    auto* xyXTarget = apvts.getParameter(camelphat::ParameterIDs::xyXTarget);
+    auto* xyXDepth  = apvts.getParameter(camelphat::ParameterIDs::xyXDepth);
+    auto* xyX       = apvts.getParameter(camelphat::ParameterIDs::xyX);
+    assert(xyXTarget != nullptr && xyXDepth != nullptr && xyX != nullptr);
+
+    const int mmCutIdx = static_cast<int>(camelphat::ModTarget::MMCutoff);
+    xyXTarget->setValueNotifyingHost(xyXTarget->convertTo0to1(static_cast<float>(mmCutIdx)));
+    xyXDepth->setValueNotifyingHost(xyXDepth->convertTo0to1(0.8f));
+    xyX->setValueNotifyingHost(0.9f); // normX = 0.9 -> (0.9*2 - 1) = 0.8 -> * 0.8 depth = 0.64
+
+    processor.processBlock(buffer, midi);
+    float xyOffset = processor.getModulationEngine().getOffset(camelphat::ModTarget::MMCutoff);
+    assert(xyOffset > 0.5f && "ModulationEngine must deliver positive offset to MMCutoff from XY pad");
+    juce::ignoreUnused(nonZeroLfoOffsetObserved, xyOffset);
+
+    std::cout << "  -> PASS: ModulationEngine actively routes non-zero LFO and XY Pad offsets to target parameters.\n" << std::endl;
+}
+
+// ==============================================================================
+// Test 11: Dual Input and Output Metering Telemetry Verification
+// ==============================================================================
+static void testInputAndOutputMetering()
+{
+    std::cout << "[Test 11] Running Input and Output Level Metering Verification..." << std::endl;
+
+    CamelPhatAudioProcessor processor;
+    processor.prepareToPlay(44100.0, 512);
+
+    juce::AudioBuffer<float> buffer(2, 512);
+    generateSineWave(buffer, 44100.0, 440.0f);
+    juce::MidiBuffer midi;
+
+    processor.processBlock(buffer, midi);
+
+    const float inPeakL = processor.getInputMeterSource().getPeakLevel(0);
+    const float inPeakR = processor.getInputMeterSource().getPeakLevel(1);
+    const float inRmsL  = processor.getInputMeterSource().getRmsLevel(0);
+
+    const float outPeakL = processor.getMasterSection().getPeakLevel(0);
+    const float outRmsL  = processor.getMasterSection().getRmsLevel(0);
+
+    assert(inPeakL > 0.5f && inPeakR > 0.5f && "Input meter must detect peak signal");
+    assert(inRmsL > 0.3f && "Input meter must detect RMS signal");
+    assert(outPeakL > 0.1f && outRmsL > 0.05f && "Output meter must detect peak and RMS signal");
+
+    juce::ignoreUnused(inPeakL, inPeakR, inRmsL, outPeakL, outRmsL);
+    std::cout << "  -> PASS: Dual Input and Output meters report active, finite audio telemetry.\n" << std::endl;
+}
+
 int main(int, char*[])
 {
     std::cout << "=====================================================" << std::endl;
@@ -404,6 +511,8 @@ int main(int, char*[])
         testFactoryPresetsRecall();
         testCompressorGainReductionTelemetry();
         testEditorLayoutAndNonOverlap();
+        testModulationTargetDelivery();
+        testInputAndOutputMetering();
 
         std::cout << "=====================================================" << std::endl;
         std::cout << "   ALL 7 DSP SUITES PASSED (100% SUCCESS)            " << std::endl;

@@ -167,6 +167,9 @@ private:
     juce::Slider bpHighCutSlider;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> bpLowCutAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> bpHighCutAttachment;
+    bool isUpdatingBpCutoffs { false };
+    double lastLowCutVal { 20.0 };
+    double lastHighCutVal { 20000.0 };
     juce::Label bpLowCutLabel;
     juce::Label bpHighCutLabel;
     std::unique_ptr<PassbandVisualizer> bpPassband;
@@ -232,7 +235,8 @@ private:
     RotaryControl inputGainKnob;
     RotaryControl masterMixKnob;
     RotaryControl masterVolKnob;
-    camelphat::ui::StereoVUMeterComponent vuMeter;
+    camelphat::ui::StereoVUMeterComponent inputMeter;
+    camelphat::ui::StereoVUMeterComponent outputMeter;
 
     // Help Floating Bubble
     camelphat::ui::HelpOverlayComponent helpOverlay;

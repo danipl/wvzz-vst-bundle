@@ -135,10 +135,10 @@ public:
         const float kLow = 1.0f / qLow;
         const float kHigh = 1.0f / qHigh;
 
-        // Clamp frequencies safely within Nyquist limit
+        // Clamp frequencies safely within Nyquist limit and enforce Low Cut <= High Cut
         const float maxFreq = static_cast<float>(sampleRate * 0.49);
         const float safeLow  = juce::jlimit(20.0f, maxFreq, cutoffLow);
-        const float safeHigh = juce::jlimit(20.0f, maxFreq, cutoffHigh);
+        const float safeHigh = juce::jlimit(safeLow, maxFreq, cutoffHigh);
 
         const float gLow = std::tan(juce::MathConstants<float>::pi * safeLow / static_cast<float>(sampleRate));
         const float gHigh = std::tan(juce::MathConstants<float>::pi * safeHigh / static_cast<float>(sampleRate));

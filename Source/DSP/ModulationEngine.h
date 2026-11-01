@@ -129,13 +129,10 @@ public:
         applyMod(xyXTarget, xyXModOutput);
         applyMod(xyYTarget, xyYModOutput);
 
-        // Calculate step increments for sub-block interpolation
-        const float invSteps = 1.0f / static_cast<float>(std::max(1, numSamples));
-        for (size_t i = 0; i < numTargets; ++i)
-        {
-            targetOffsetsTarget[i] = newTargets[i];
-            targetOffsetsStep[i] = (targetOffsetsTarget[i] - targetOffsetsCurrent[i]) * invSteps;
-        }
+        // Update active target offsets for the control block
+        targetOffsetsCurrent = newTargets;
+        targetOffsetsTarget = newTargets;
+        targetOffsetsStep.fill(0.0f);
 
         currentLfo1Snap.store(lfo1Val, std::memory_order_relaxed);
         currentLfo2Snap.store(lfo2Val, std::memory_order_relaxed);

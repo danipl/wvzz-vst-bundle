@@ -30,12 +30,12 @@ void CamelPhatAudioProcessorEditor::PassbandVisualizer::paint(juce::Graphics& g)
     g.setColour(camelphat::ui::CamelPhatLookAndFeel::cardBorder);
     g.drawRoundedRectangle(bounds, 4.0f, 1.0f);
 
-    // Compute slider relative thumb positions
-    const float lowNorm = static_cast<float>(lowSlider.getValue() / lowSlider.getMaximum());
-    const float highNorm = static_cast<float>(highSlider.getValue() / highSlider.getMaximum());
+    // Compute slider relative thumb positions using exact proportion of length
+    const float lowProp = static_cast<float>(lowSlider.valueToProportionOfLength(lowSlider.getValue()));
+    const float highProp = static_cast<float>(highSlider.valueToProportionOfLength(highSlider.getValue()));
 
-    const float yLow = bounds.getBottom() - lowNorm * bounds.getHeight();
-    const float yHigh = bounds.getBottom() - highNorm * bounds.getHeight();
+    const float yLow = bounds.getBottom() - lowProp * bounds.getHeight();
+    const float yHigh = bounds.getBottom() - highProp * bounds.getHeight();
 
     const float passTop = std::min(yLow, yHigh);
     const float passBottom = std::max(yLow, yHigh);
@@ -159,7 +159,8 @@ CamelPhatAudioProcessorEditor::CamelPhatAudioProcessorEditor(CamelPhatAudioProce
             camelphat::ParameterIDs::xyY,
             "X/Y PAD", "X Target", "Y Target",
             camelphat::ui::CamelPhatLookAndFeel::neonGreen),
-      vuMeter(proc.getMasterSection())
+      inputMeter(proc.getInputMeterSource(), "IN"),
+      outputMeter(proc.getMasterSection(), "OUT")
 {
     setLookAndFeel(&lookAndFeel);
 
@@ -258,6 +259,78 @@ CamelPhatAudioProcessorEditor::CamelPhatAudioProcessorEditor(CamelPhatAudioProce
 
     bpPassband = std::make_unique<PassbandVisualizer>(bpLowCutSlider, bpHighCutSlider);
     contentContainer.addAndMakeVisible(*bpPassband);
+
+    lastLowCutVal = bpLowCutSlider.getValue();
+    lastHighCutVal = bpHighCutSlider.getValue();
+
+    bpLowCutSlider.onValueChange = [this] {
+        if (isUpdatingBpCutoffs)
+            return;
+
+        const double currentLow = bpLowCutSlider.getValue();
+        const double currentHigh = bpHighCutSlider.getValue();
+        const bool isLinked = bpLinkToggle.button.getToggleState();
+
+        isUpdatingBpCutoffs = true;
+
+        if (isLinked)
+        {
+            const double ratio = lastHighCutVal / std::max(1.0, lastLowCutVal);
+            const double newHigh = juce::jlimit(currentLow, 20000.0, currentLow * ratio);
+            bpHighCutSlider.setValue(newHigh, juce::sendNotificationSync);
+            lastHighCutVal = newHigh;
+            lastLowCutVal = currentLow;
+        }
+        else
+        {
+            if (currentLow > currentHigh)
+                bpLowCutSlider.setValue(currentHigh, juce::sendNotificationSync);
+
+            lastLowCutVal = bpLowCutSlider.getValue();
+            lastHighCutVal = currentHigh;
+        }
+
+        isUpdatingBpCutoffs = false;
+        if (bpPassband != nullptr)
+            bpPassband->repaint();
+    };
+
+    bpHighCutSlider.onValueChange = [this] {
+        if (isUpdatingBpCutoffs)
+            return;
+
+        const double currentLow = bpLowCutSlider.getValue();
+        const double currentHigh = bpHighCutSlider.getValue();
+        const bool isLinked = bpLinkToggle.button.getToggleState();
+
+        isUpdatingBpCutoffs = true;
+
+        if (isLinked)
+        {
+            const double ratio = lastHighCutVal / std::max(1.0, lastLowCutVal);
+            const double newLow = juce::jlimit(20.0, currentHigh, currentHigh / std::max(0.01, ratio));
+            bpLowCutSlider.setValue(newLow, juce::sendNotificationSync);
+            lastLowCutVal = newLow;
+            lastHighCutVal = currentHigh;
+        }
+        else
+        {
+            if (currentHigh < currentLow)
+                bpHighCutSlider.setValue(currentLow, juce::sendNotificationSync);
+
+            lastLowCutVal = currentLow;
+            lastHighCutVal = bpHighCutSlider.getValue();
+        }
+
+        isUpdatingBpCutoffs = false;
+        if (bpPassband != nullptr)
+            bpPassband->repaint();
+    };
+
+    bpLinkToggle.button.onClick = [this] {
+        lastLowCutVal = bpLowCutSlider.getValue();
+        lastHighCutVal = bpHighCutSlider.getValue();
+    };
 
     bpLowCutLabel.setText("Low Cut", juce::dontSendNotification);
     bpLowCutLabel.setFont(juce::FontOptions(10.5f, juce::Font::bold));
@@ -398,7 +471,8 @@ CamelPhatAudioProcessorEditor::CamelPhatAudioProcessorEditor(CamelPhatAudioProce
                camelphat::ui::CamelPhatLookAndFeel::neonGreen);
     initRotary(masterVolKnob, camelphat::ParameterIDs::masterVol, "Volume", false,
                camelphat::ui::CamelPhatLookAndFeel::neonGreen);
-    contentContainer.addAndMakeVisible(vuMeter);
+    contentContainer.addAndMakeVisible(inputMeter);
+    contentContainer.addAndMakeVisible(outputMeter);
 
     // Help Overlay (top layer)
     contentContainer.addAndMakeVisible(helpOverlay);
@@ -772,8 +846,11 @@ void CamelPhatAudioProcessorEditor::resized()
     masterHelp.setBounds(masterCard.getHeaderHelpBounds());
     auto masterInner = masterCard.getContentBounds();
 
-    auto vuArea = masterInner.removeFromRight(40).reduced(2, 4);
-    vuMeter.setBounds(vuArea);
+    auto vuArea = masterInner.removeFromRight(56).reduced(1, 4);
+    int meterW = (vuArea.getWidth() - 4) / 2;
+    inputMeter.setBounds(vuArea.removeFromLeft(meterW));
+    vuArea.removeFromLeft(4);
+    outputMeter.setBounds(vuArea);
 
     int mKw = masterInner.getWidth() / 3;
     layoutKnob(inputGainKnob, masterInner.removeFromLeft(mKw));

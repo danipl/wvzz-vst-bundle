@@ -149,42 +149,10 @@ void CamelPhatAudioProcessor::updateSmootherTargets() noexcept
 {
     inputGainSmoothed.setTargetValue(paramPointers.master.inputGain->load(std::memory_order_relaxed));
 
-    const float curLow = paramPointers.bp.lowCut->load(std::memory_order_relaxed);
-    const float curHigh = paramPointers.bp.highCut->load(std::memory_order_relaxed);
-    const bool isLinked = paramPointers.bp.link->load(std::memory_order_relaxed) > 0.5f;
-
-    if (isLinked && !isUpdatingLink.load(std::memory_order_relaxed))
-    {
-        if (std::abs(curLow - lastLowCut) > 0.05f)
-        {
-            // Low changed -> preserve ratio high/low
-            const float ratio = lastHighCut / std::max(1.0f, lastLowCut);
-            const float newHigh = juce::jlimit(20.0f, 20000.0f, curLow * ratio);
-            isUpdatingLink.store(true, std::memory_order_relaxed);
-            if (auto* p = apvts.getParameter(camelphat::ParameterIDs::bpHighCut))
-                p->setValueNotifyingHost(p->convertTo0to1(newHigh));
-            isUpdatingLink.store(false, std::memory_order_relaxed);
-            lastHighCut = newHigh;
-            lastLowCut = curLow;
-        }
-        else if (std::abs(curHigh - lastHighCut) > 0.05f)
-        {
-            // High changed -> preserve ratio low = high / ratio
-            const float ratio = lastHighCut / std::max(1.0f, lastLowCut);
-            const float newLow = juce::jlimit(20.0f, 20000.0f, curHigh / std::max(0.01f, ratio));
-            isUpdatingLink.store(true, std::memory_order_relaxed);
-            if (auto* p = apvts.getParameter(camelphat::ParameterIDs::bpLowCut))
-                p->setValueNotifyingHost(p->convertTo0to1(newLow));
-            isUpdatingLink.store(false, std::memory_order_relaxed);
-            lastLowCut = newLow;
-            lastHighCut = curHigh;
-        }
-    }
-    else
-    {
-        lastLowCut = curLow;
-        lastHighCut = curHigh;
-    }
+    const float rawLow = paramPointers.bp.lowCut->load(std::memory_order_relaxed);
+    const float rawHigh = paramPointers.bp.highCut->load(std::memory_order_relaxed);
+    const float curLow = std::min(rawLow, rawHigh);
+    const float curHigh = std::max(rawLow, rawHigh);
 
     bpLowCutSmoothed.setTargetValue(curLow);
     bpHighCutSmoothed.setTargetValue(curHigh);
@@ -235,6 +203,7 @@ void CamelPhatAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlo
     compressorModule.prepare(spec);
     masterSection.prepare(spec);
     modEngine.prepare(sampleRate);
+    inputMeterSource.reset();
 
     // Set oversampling latency on master section and report to host
     const int latency = distortionModule.getLatencyInSamples();
@@ -255,6 +224,7 @@ void CamelPhatAudioProcessor::releaseResources()
     compressorModule.reset();
     masterSection.reset();
     modEngine.reset();
+    inputMeterSource.reset();
 }
 
 bool CamelPhatAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const
@@ -353,7 +323,7 @@ void CamelPhatAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juc
 
         // Fetch modulated targets
         const float modLowCut  = juce::jlimit(20.0f, 20000.0f, curLowCut * std::pow(2.0f, (modEngine.getOffset(camelphat::ModTarget::BPLowCut) + modEngine.getOffset(camelphat::ModTarget::BPBothCuts)) * 4.0f));
-        const float modHighCut = juce::jlimit(20.0f, 20000.0f, curHighCut * std::pow(2.0f, (modEngine.getOffset(camelphat::ModTarget::BPHighCut) + modEngine.getOffset(camelphat::ModTarget::BPBothCuts)) * 4.0f));
+        const float modHighCut = juce::jlimit(modLowCut, 20000.0f, curHighCut * std::pow(2.0f, (modEngine.getOffset(camelphat::ModTarget::BPHighCut) + modEngine.getOffset(camelphat::ModTarget::BPBothCuts)) * 4.0f));
         const float modLowRes  = juce::jlimit(0.0f, 1.0f, curLowRes + modEngine.getOffset(camelphat::ModTarget::BPLowRes));
         const float modHighRes = juce::jlimit(0.0f, 1.0f, curHighRes + modEngine.getOffset(camelphat::ModTarget::BPHighRes));
         const float modBrMix   = juce::jlimit(0.0f, 1.0f, curBrMix + modEngine.getOffset(camelphat::ModTarget::BPBrMix));
@@ -391,6 +361,8 @@ void CamelPhatAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juc
             subPreBp.copyFrom(ch, 0, subIn.getReadPointer(ch), subBlockSize);
             subDry.copyFrom(ch, 0, subIn.getReadPointer(ch), subBlockSize);
         }
+
+        inputMeterSource.update(subIn, subBlockSize);
 
         // 1. Module 1: BP Filter (Bandpass + Band-Reject Split)
         bpFilter.process(subIn, subPass, subRej, modLowCut, modHighCut, modLowRes, modHighRes, bpByp);
