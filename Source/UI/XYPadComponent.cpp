@@ -114,8 +114,9 @@ void XYPadComponent::paint(juce::Graphics& g)
     g.setColour(CamelPhatLookAndFeel::cardBorder.withAlpha(0.35f));
     const float midX = bounds.getCentreX();
     const float midY = bounds.getCentreY();
-    g.drawDashedLine(juce::Line<float>(bounds.getX(), midY, bounds.getRight(), midY), nullptr, 0, 1.0f);
-    g.drawDashedLine(juce::Line<float>(midX, bounds.getY(), midX, bounds.getBottom()), nullptr, 0, 1.0f);
+    const float dashLengths[] = { 4.0f, 4.0f };
+    g.drawDashedLine(juce::Line<float>(bounds.getX(), midY, bounds.getRight(), midY), dashLengths, 2, 1.0f);
+    g.drawDashedLine(juce::Line<float>(midX, bounds.getY(), midX, bounds.getBottom()), dashLengths, 2, 1.0f);
 
     // 3. Dynamic Crosshairs at current puck position
     auto puck = getPuckScreenPosition();
