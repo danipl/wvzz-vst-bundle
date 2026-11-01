@@ -54,7 +54,7 @@ public:
 
     [[nodiscard]] juce::Rectangle<int> getContentBounds() const noexcept
     {
-        return getLocalBounds().reduced(8).withTrimmedTop(32);
+        return getBounds().reduced(8).withTrimmedTop(32);
     }
 
     void setTitle(const juce::String& newTitle)
