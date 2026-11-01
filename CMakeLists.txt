@@ -101,3 +101,11 @@ target_link_libraries(camelphat_dsp_tests
 
 enable_testing()
 add_test(NAME CamelPhatDSPTests COMMAND camelphat_dsp_tests)
+
+if(APPLE AND TARGET CamelPhat_VST3)
+    # Re-apply ad-hoc signature after juce_vst3_helper generates moduleinfo.json
+    add_custom_command(TARGET CamelPhat_VST3 POST_BUILD
+        COMMAND codesign --force --deep -s - "$<TARGET_BUNDLE_DIR:CamelPhat_VST3>"
+        COMMENT "Re-signing VST3 bundle after moduleinfo.json generation"
+    )
+endif()

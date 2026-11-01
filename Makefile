@@ -81,15 +81,18 @@ install: vst3 au
 	@rm -rf $(USER_AU_DIR)/CamelPhat.component
 	@cp -R $(TARGET_VST3) $(USER_VST3_DIR)/
 	@cp -R $(TARGET_AU) $(USER_AU_DIR)/
+	@codesign --force --deep -s - $(USER_VST3_DIR)/CamelPhat.vst3
+	@codesign --force --deep -s - $(USER_AU_DIR)/CamelPhat.component
 	@killall -9 AudioComponentRegistrar 2>/dev/null || true
-	@echo "Installed CamelPhat.vst3 to $(USER_VST3_DIR)/"
-	@echo "Installed CamelPhat.component to $(USER_AU_DIR)/"
+	@echo "Installed and signed CamelPhat.vst3 to $(USER_VST3_DIR)/"
+	@echo "Installed and signed CamelPhat.component to $(USER_AU_DIR)/"
 
 install-vst3: vst3
 	@mkdir -p $(USER_VST3_DIR)
 	@rm -rf $(USER_VST3_DIR)/CamelPhat.vst3
 	@cp -R $(TARGET_VST3) $(USER_VST3_DIR)/
-	@echo "Installed CamelPhat.vst3 to $(USER_VST3_DIR)/"
+	@codesign --force --deep -s - $(USER_VST3_DIR)/CamelPhat.vst3
+	@echo "Installed and signed CamelPhat.vst3 to $(USER_VST3_DIR)/"
 
 # System-wide installation (/Library/Audio/Plug-Ins/VST3)
 install-system: vst3
@@ -97,13 +100,15 @@ install-system: vst3
 		mkdir -p $(SYS_VST3_DIR); \
 		rm -rf $(SYS_VST3_DIR)/CamelPhat.vst3; \
 		cp -R $(TARGET_VST3) $(SYS_VST3_DIR)/; \
-		echo "Installed CamelPhat.vst3 to $(SYS_VST3_DIR)/"; \
+		codesign --force --deep -s - $(SYS_VST3_DIR)/CamelPhat.vst3; \
+		echo "Installed and signed CamelPhat.vst3 to $(SYS_VST3_DIR)/"; \
 	else \
 		echo "Copying to system folder $(SYS_VST3_DIR) requires sudo:"; \
 		sudo mkdir -p $(SYS_VST3_DIR); \
 		sudo rm -rf $(SYS_VST3_DIR)/CamelPhat.vst3; \
 		sudo cp -R $(TARGET_VST3) $(SYS_VST3_DIR)/; \
-		echo "Installed CamelPhat.vst3 to $(SYS_VST3_DIR)/"; \
+		sudo codesign --force --deep -s - $(SYS_VST3_DIR)/CamelPhat.vst3; \
+		echo "Installed and signed CamelPhat.vst3 to $(SYS_VST3_DIR)/"; \
 	fi
 
 # ------------------------------------------------------------------------------
