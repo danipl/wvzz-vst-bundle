@@ -207,9 +207,9 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
 
     // MM Filter
     layout.add(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{ ParameterIDs::mmCutoff, 1 }, "MM Cutoff", freqSkew, 1000.0f));
+        juce::ParameterID{ ParameterIDs::mmCutoff, 1 }, "MM Cutoff", freqSkew, 20.0f));
     layout.add(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{ ParameterIDs::mmResonance, 1 }, "MM Resonance", 0.0f, 1.0f, 0.2f));
+        juce::ParameterID{ ParameterIDs::mmResonance, 1 }, "MM Resonance", 0.0f, 1.0f, 0.0f));
     layout.add(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID{ ParameterIDs::mmMode, 1 }, "MM Filter Mode",
         juce::StringArray{ "Lowpass", "Bandpass", "Highpass" }, 0));

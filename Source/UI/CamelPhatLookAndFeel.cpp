@@ -34,17 +34,19 @@ void CamelPhatLookAndFeel::drawRotarySlider(juce::Graphics& g,
 {
     auto bounds = juce::Rectangle<int>(x, y, width, height).toFloat();
     // Reserve bottom space for text box if visible
-    const float textBoxHeight = slider.getTextBoxPosition() != juce::Slider::NoTextBox ? 16.0f : 0.0f;
-    auto dialArea = bounds.removeFromTop(bounds.getHeight() - textBoxHeight).reduced(3.0f);
+    const float textBoxHeight = slider.getTextBoxPosition() != juce::Slider::NoTextBox ? 14.0f : 0.0f;
+    auto dialArea = bounds.removeFromTop(bounds.getHeight() - textBoxHeight);
 
-    const float radius = juce::jmin(dialArea.getWidth(), dialArea.getHeight()) * 0.5f;
+    // Keep dial compact to prevent overlapping with adjacent labels or boundaries
+    const float maxRadius = juce::jmin(dialArea.getWidth(), dialArea.getHeight()) * 0.5f - 2.0f;
+    const float radius = juce::jmax(8.0f, maxRadius);
     const float centreX = dialArea.getCentreX();
     const float centreY = dialArea.getCentreY();
     const float ry = centreY - radius;
     const float rw = radius * 2.0f;
 
     const float angle = rotaryStartAngle + sliderPosProportional * (rotaryEndAngle - rotaryStartAngle);
-    const float trackWidth = juce::jmax(2.5f, radius * 0.14f);
+    const float trackWidth = juce::jlimit(2.0f, 4.0f, radius * 0.15f);
 
     // 1. Outer Inactive Track Arc
     juce::Path backgroundArc;

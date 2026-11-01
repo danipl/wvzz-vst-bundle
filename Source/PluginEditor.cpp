@@ -81,9 +81,8 @@ CamelPhatAudioProcessorEditor::CamelPhatAudioProcessorEditor(CamelPhatAudioProce
     initRotary(mmEnvRelease, camelphat::ParameterIDs::mmEnvRelease, "Release");
 
     mmModeBox.addItem("Low-Pass 12dB", 1);
-    mmModeBox.addItem("Low-Pass 24dB", 2);
-    mmModeBox.addItem("Band-Pass", 3);
-    mmModeBox.addItem("High-Pass", 4);
+    mmModeBox.addItem("Band-Pass", 2);
+    mmModeBox.addItem("High-Pass", 3);
     mmModeBox.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(mmModeBox);
     mmModeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
@@ -191,9 +190,10 @@ void CamelPhatAudioProcessorEditor::resized()
 
     // Helper for laying out a rotary slider + label under it
     auto layoutKnob = [](RotaryControl& ctrl, juce::Rectangle<int> area) {
-        int labelH = 16;
-        ctrl.slider.setBounds(area.withTrimmedBottom(labelH));
-        ctrl.label.setBounds(area.removeFromBottom(labelH));
+        int labelH = 14;
+        auto knobArea = area.reduced(2, 1);
+        ctrl.label.setBounds(knobArea.removeFromBottom(labelH));
+        ctrl.slider.setBounds(knobArea);
     };
 
     // -------------------------------------------------------------
