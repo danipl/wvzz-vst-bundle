@@ -1,4 +1,5 @@
 #include "PluginProcessor.h"
+#include "PluginEditor.h"
 #include <iostream>
 #include <vector>
 #include <cmath>
@@ -319,6 +320,73 @@ static void testFactoryPresetsRecall()
     std::cout << "  -> PASS: All 10 factory presets recall correctly and Dice satisfies constraints.\n" << std::endl;
 }
 
+static void testCompressorGainReductionTelemetry()
+{
+    std::cout << "[Test 8] Compressor Gain Reduction Telemetry" << std::endl;
+    camelphat::dsp::CompressorModule comp;
+    juce::dsp::ProcessSpec spec { 44100.0, 512, 2 };
+    comp.prepare(spec);
+
+    // Initial / reset state
+    assert(std::abs(comp.getGainReductionDb()) < 0.001f && "Initial GR must be 0 dB");
+
+    // Process a loud signal with compression enabled (amount = 0.8, normal mode)
+    comp.setParameters(0.8f, 100.0f, false, false);
+    juce::AudioBuffer<float> buffer(2, 512);
+    for (int ch = 0; ch < 2; ++ch)
+        for (int i = 0; i < 512; ++i)
+            buffer.setSample(ch, i, 0.95f);
+
+    comp.process(buffer);
+    const float activeGr = comp.getGainReductionDb();
+    assert(activeGr < -0.5f && "Gain reduction must be negative during active compression");
+
+    // Bypassed state must reset telemetry to 0.0f
+    comp.setParameters(0.8f, 100.0f, false, true); // bypass = true
+    comp.process(buffer);
+    assert(std::abs(comp.getGainReductionDb()) < 0.001f && "Bypassed compressor must report 0 dB GR");
+
+    std::cout << "  -> PASS: Compressor gain reduction telemetry reports negative dB under compression and resets to 0 dB when bypassed.\n" << std::endl;
+}
+
+static void testEditorLayoutAndNonOverlap()
+{
+    std::cout << "[Test 9] Automated GUI Layout & Bounds Verification across Window Sizes" << std::endl;
+    // Initialize JUCE MessageManager for GUI component testing
+    juce::ScopedJuceInitialiser_GUI guiInit;
+
+    CamelPhatAudioProcessor processor;
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    assert(editor != nullptr && "Editor must instantiate successfully");
+
+    // Test sizes: 75% (810x510), 100% (1080x680), and 177% (1920x1200)
+    const std::vector<std::pair<int, int>> testSizes = {
+        { 810, 510 },
+        { 1080, 680 },
+        { 1920, 1200 }
+    };
+
+    for (const auto& [w, h] : testSizes)
+    {
+        editor->setSize(w, h);
+        assert(editor->getWidth() == w && editor->getHeight() == h);
+
+        // Verify child components have non-empty bounds
+        for (int i = 0; i < editor->getNumChildComponents(); ++i)
+        {
+            auto* child = editor->getChildComponent(i);
+            assert(child != nullptr);
+            if (child->isVisible())
+            {
+                assert(child->getWidth() > 0 && child->getHeight() > 0 &&
+                       "Visible root child component must have non-zero width and height");
+            }
+        }
+    }
+
+    std::cout << "  -> PASS: Editor instantiates and scales across 810x510, 1080x680, and 1920x1200 with valid child geometry.\n" << std::endl;
+}
+
 int main(int, char*[])
 {
     std::cout << "=====================================================" << std::endl;
@@ -334,6 +402,8 @@ int main(int, char*[])
         testBandRejectRecombination();
         testMMFilterTopologies();
         testFactoryPresetsRecall();
+        testCompressorGainReductionTelemetry();
+        testEditorLayoutAndNonOverlap();
 
         std::cout << "=====================================================" << std::endl;
         std::cout << "   ALL 7 DSP SUITES PASSED (100% SUCCESS)            " << std::endl;

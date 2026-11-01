@@ -39,7 +39,7 @@ public:
     void reset() noexcept override
     {
         envelope = 0.0f;
-        gainReductionDb = 0.0f;
+        gainReductionDb.store(0.0f, std::memory_order_relaxed);
     }
 
     void setParameters(float amountNorm,
@@ -51,6 +51,9 @@ public:
         releaseTimeMs = juce::jlimit(10.0f, 1500.0f, releaseMs);
         phatMode = phatModeEnabled;
         isBypassed = bypass;
+
+        if (isBypassed || amount <= 0.001f)
+            gainReductionDb.store(0.0f, std::memory_order_relaxed);
 
         // One-knob mappings:
         // Threshold: 0 dB down to -36 dB
@@ -86,7 +89,10 @@ public:
         const int numChannels = juce::jmin(2, buffer.getNumChannels());
 
         if (numSamples == 0 || numChannels == 0 || isBypassed || amount <= 0.001f)
+        {
+            gainReductionDb.store(0.0f, std::memory_order_relaxed);
             return;
+        }
 
         float* channelLeft  = buffer.getWritePointer(0);
         float* channelRight = numChannels > 1 ? buffer.getWritePointer(1) : nullptr;
@@ -127,7 +133,7 @@ public:
                 grDb = -slope * (diff * diff) / (2.0f * kneeWidthDb);
             }
 
-            gainReductionDb = grDb;
+            gainReductionDb.store(grDb, std::memory_order_relaxed);
             const float compGain = juce::Decibels::decibelsToGain(grDb) * autoMakeupLinear;
 
             float outL = inL * compGain;
@@ -146,7 +152,7 @@ public:
         }
     }
 
-    [[nodiscard]] float getGainReductionDb() const noexcept { return gainReductionDb; }
+    [[nodiscard]] float getGainReductionDb() const noexcept { return gainReductionDb.load(std::memory_order_relaxed); }
 
 private:
     double sampleRate { 44100.0 };
@@ -165,7 +171,7 @@ private:
     float attackCoeff { 0.0f };
     float releaseCoeff { 0.0f };
     float envelope { 0.0f };
-    float gainReductionDb { 0.0f };
+    std::atomic<float> gainReductionDb { 0.0f };
 };
 
 } // namespace camelphat::dsp

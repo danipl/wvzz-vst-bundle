@@ -54,16 +54,84 @@ private:
         std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> attachment;
     };
 
-    void initRotary(RotaryControl& ctrl, const juce::String& paramId, const juce::String& labelText, bool isBipolar = false);
-    void initToggle(ToggleControl& ctrl, const juce::String& paramId, const juce::String& text);
-    void initCombo(ComboControl& ctrl, const juce::String& paramId, const juce::String& labelText, const juce::StringArray& items);
+    // Sub-component: BP Filter Passband visualizer between vertical sliders
+    class PassbandVisualizer : public juce::Component
+    {
+    public:
+        PassbandVisualizer(juce::Slider& low, juce::Slider& high)
+            : lowSlider(low), highSlider(high) {}
+
+        void paint(juce::Graphics& g) override;
+    private:
+        juce::Slider& lowSlider;
+        juce::Slider& highSlider;
+    };
+
+    // Sub-component: Live LFO Waveform Preview Box
+    class LFOScopeComponent : public juce::Component
+    {
+    public:
+        LFOScopeComponent(std::function<int()> getWave,
+                          std::function<float()> getPhase,
+                          std::function<float()> getSnap,
+                          juce::Colour scopeColour)
+            : waveFn(std::move(getWave)),
+              phaseFn(std::move(getPhase)),
+              snapFn(std::move(getSnap)),
+              colour(scopeColour) {}
+
+        void paint(juce::Graphics& g) override;
+    private:
+        std::function<int()> waveFn;
+        std::function<float()> phaseFn;
+        std::function<float()> snapFn;
+        juce::Colour colour;
+    };
+
+    // Sub-component: Compressor Gain Reduction Meter
+    class CompressorGRMeter : public juce::Component
+    {
+    public:
+        explicit CompressorGRMeter(const camelphat::dsp::CompressorModule& comp)
+            : compressor(comp) {}
+
+        void paint(juce::Graphics& g) override;
+    private:
+        const camelphat::dsp::CompressorModule& compressor;
+    };
+
+    // Responsive Canvas Component that paints the dark background and top header bar
+    class ContentContainer : public juce::Component
+    {
+    public:
+        void paint(juce::Graphics& g) override;
+    };
+
+    void initRotary(RotaryControl& ctrl, const juce::String& paramId, const juce::String& labelText,
+                    bool isBipolar = false, juce::Colour accent = camelphat::ui::CamelPhatLookAndFeel::neonGreen);
+    void initToggle(ToggleControl& ctrl, const juce::String& paramId, const juce::String& text,
+                    bool isHeaderBypass = false, bool isPill = false,
+                    juce::Colour accent = camelphat::ui::CamelPhatLookAndFeel::neonGreen);
+    void initCombo(ComboControl& ctrl, const juce::String& paramId, const juce::String& labelText,
+                   const juce::StringArray& items);
+
+    void updateModuleBypassVisuals();
 
     CamelPhatAudioProcessor& audioProcessor;
     camelphat::ui::CamelPhatLookAndFeel lookAndFeel;
     camelphat::ui::HelpContentRepository helpRepo;
 
-    // Content container for proportional 900x560 canvas scaling
-    juce::Component contentContainer;
+    // Content container for proportional 1080x680 canvas scaling
+    ContentContainer contentContainer;
+
+    // Top Header Bar Controls
+    juce::Label titleLabel;
+    juce::Label subTitleLabel;
+    juce::TextButton prevPresetButton;
+    juce::ComboBox presetSelector;
+    juce::TextButton nextPresetButton;
+    juce::TextButton diceButton;
+    ToggleControl masterBypassToggle;
 
     // Cards
     camelphat::ui::ModuleCardComponent bpFilterCard;
@@ -85,14 +153,43 @@ private:
     camelphat::ui::HelpButtonComponent compHelp;
     camelphat::ui::HelpButtonComponent masterHelp;
 
-    // Single Central Assignable X/Y Pad
+    // Header-Integrated Module Bypass Buttons
+    ToggleControl bpBypassToggle;
+    ToggleControl distBypassToggle;
+    ToggleControl mmBypassToggle;
+    ToggleControl flgBypassToggle;
+    ToggleControl meqBypassToggle;
+    ToggleControl compBypassToggle;
+
+    // Left Column: BP Filter
+    ToggleControl bpLinkToggle;
+    juce::Slider bpLowCutSlider;
+    juce::Slider bpHighCutSlider;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> bpLowCutAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> bpHighCutAttachment;
+    juce::Label bpLowCutLabel;
+    juce::Label bpHighCutLabel;
+    std::unique_ptr<PassbandVisualizer> bpPassband;
+    RotaryControl bpLowResKnob;
+    RotaryControl bpHighResKnob;
+    RotaryControl bpBrMixKnob;
+
+    // Left Column: Distortion
+    RotaryControl distMechKnob;
+    RotaryControl distTubeKnob;
+    RotaryControl distBitKnob;
+    RotaryControl distXcitaKnob;
+
+    // Center Column: Assignable X/Y Pad & Controls
     camelphat::ui::XYPadComponent xyPad;
     ComboControl xyXTargetBox;
     ComboControl xyYTargetBox;
     RotaryControl xyXDepthKnob;
     RotaryControl xyYDepthKnob;
 
-    // LFO 1 & LFO 2 Controls
+    // Center Column: LFO 1 & LFO 2 Sub-panels
+    std::unique_ptr<LFOScopeComponent> lfo1Scope;
+    std::unique_ptr<LFOScopeComponent> lfo2Scope;
     ComboControl lfo1WaveBox;
     ComboControl lfo1TargetBox;
     ComboControl lfo1SyncDivBox;
@@ -107,28 +204,7 @@ private:
     RotaryControl lfo2RateKnob;
     RotaryControl lfo2DepthKnob;
 
-    // Left Column: BP Filter
-    ToggleControl bpBypassToggle;
-    ToggleControl bpLinkToggle;
-    juce::Slider bpLowCutSlider;
-    juce::Slider bpHighCutSlider;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> bpLowCutAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> bpHighCutAttachment;
-    juce::Label bpLowCutLabel;
-    juce::Label bpHighCutLabel;
-    RotaryControl bpLowResKnob;
-    RotaryControl bpHighResKnob;
-    RotaryControl bpBrMixKnob;
-
-    // Left Column: Distortion
-    ToggleControl distBypassToggle;
-    RotaryControl distMechKnob;
-    RotaryControl distTubeKnob;
-    RotaryControl distBitKnob;
-    RotaryControl distXcitaKnob;
-
     // Right Column: MM Filter
-    ToggleControl mmBypassToggle;
     ComboControl mmTypeBox;
     RotaryControl mmCutoffKnob;
     RotaryControl mmResKnob;
@@ -138,32 +214,25 @@ private:
     RotaryControl mmEnvDepthKnob;
 
     // Right Column: Flanger
-    ToggleControl flgBypassToggle;
     RotaryControl flgRateKnob;
     RotaryControl flgAmountKnob;
 
     // Right Column: Magic EQ
-    ToggleControl meqBypassToggle;
     ToggleControl meqPhatToggle;
     RotaryControl meqAmountKnob;
     RotaryControl meqTuneKnob;
 
     // Right Column: Compressor
-    ToggleControl compBypassToggle;
     ToggleControl compPhatToggle;
     RotaryControl compAmountKnob;
     RotaryControl compReleaseKnob;
+    std::unique_ptr<CompressorGRMeter> compMeter;
 
     // Right Column: Master
-    ToggleControl masterBypassToggle;
     RotaryControl inputGainKnob;
     RotaryControl masterMixKnob;
     RotaryControl masterVolKnob;
-    juce::TextButton diceButton;
     camelphat::ui::StereoVUMeterComponent vuMeter;
-
-    // Preset selector
-    juce::ComboBox presetSelector;
 
     // Help Floating Bubble
     camelphat::ui::HelpOverlayComponent helpOverlay;

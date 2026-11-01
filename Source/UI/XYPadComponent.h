@@ -27,6 +27,13 @@ public:
     void paint(juce::Graphics& g) override;
     void resized() override;
 
+    void setAxisLabels(const juce::String& newXLabel, const juce::String& newYLabel)
+    {
+        labelX = newXLabel;
+        labelY = newYLabel;
+        repaint();
+    }
+
     void mouseDown(const juce::MouseEvent& e) override;
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;

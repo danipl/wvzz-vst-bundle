@@ -83,6 +83,11 @@ install: vst3 au
 	@cp -R $(TARGET_AU) $(USER_AU_DIR)/
 	@codesign --force --deep -s - $(USER_VST3_DIR)/CamelPhat.vst3
 	@codesign --force --deep -s - $(USER_AU_DIR)/CamelPhat.component
+	@if [ -w $(SYS_VST3_DIR) ]; then \
+		cp -R $(TARGET_VST3) $(SYS_VST3_DIR)/ && \
+		codesign --force --deep -s - $(SYS_VST3_DIR)/CamelPhat.vst3 && \
+		echo "Synchronized system VST3 at $(SYS_VST3_DIR)/"; \
+	fi
 	@killall -9 AudioComponentRegistrar 2>/dev/null || true
 	@echo "Installed and signed CamelPhat.vst3 to $(USER_VST3_DIR)/"
 	@echo "Installed and signed CamelPhat.component to $(USER_AU_DIR)/"

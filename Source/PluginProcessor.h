@@ -49,6 +49,7 @@ public:
     juce::AudioProcessorValueTreeState& getAPVTS() noexcept { return apvts; }
     const camelphat::ParameterPointers& getParameters() const noexcept { return paramPointers; }
     const camelphat::dsp::MasterSection& getMasterSection() const noexcept { return masterSection; }
+    const camelphat::dsp::CompressorModule& getCompressorModule() const noexcept { return compressorModule; }
     camelphat::dsp::ModulationEngine& getModulationEngine() noexcept { return modEngine; }
 
     // Dice: Smart parameter randomizer

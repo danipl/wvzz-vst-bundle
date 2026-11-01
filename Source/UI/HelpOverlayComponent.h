@@ -26,20 +26,21 @@ public:
 
     ~HelpOverlayComponent() override = default;
 
-    void displayTopic(const HelpTopic& topic, juce::Rectangle<int> targetScreenBounds, juce::Component* parentEditor)
+    void displayTopic(const HelpTopic& topic, juce::Rectangle<int> targetScreenBounds, juce::Component* parentContainer)
     {
         currentTopic = topic;
         setVisible(true);
 
         const int cardWidth = 340;
-        // Compute needed height based on tips count
         const int cardHeight = 160 + static_cast<int>(topic.parameterTips.size()) * 26;
 
-        auto parentBounds = parentEditor->getLocalBounds();
-        auto localTarget = parentEditor->getLocalPoint(nullptr, targetScreenBounds.getBottomLeft());
+        auto parentBounds = parentContainer->getLocalBounds();
+        // Convert screen target bounds into parent container's local coordinates
+        // Automatically inverts AffineTransform scale on contentContainer
+        auto localTargetRect = parentContainer->getLocalArea(nullptr, targetScreenBounds);
 
-        int x = localTarget.getX() - 10;
-        int y = localTarget.getY() + 6;
+        int x = localTargetRect.getX() - 10;
+        int y = localTargetRect.getBottom() + 6;
 
         // Clamp to parent view bounds
         if (x + cardWidth > parentBounds.getRight() - 12)
@@ -48,7 +49,7 @@ public:
             x = 12;
 
         if (y + cardHeight > parentBounds.getBottom() - 12)
-            y = parentEditor->getLocalPoint(nullptr, targetScreenBounds.getTopLeft()).getY() - cardHeight - 6;
+            y = localTargetRect.getY() - cardHeight - 6;
 
         setBounds(x, y, cardWidth, cardHeight);
         closeButton.setBounds(cardWidth - 28, 8, 20, 20);

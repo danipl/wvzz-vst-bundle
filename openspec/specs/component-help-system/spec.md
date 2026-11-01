@@ -13,11 +13,11 @@ The UI system SHALL render an interactive help button ("?") on every DSP module 
 - **THEN** the system activates contextual explanation mode for that specific component
 
 ### Requirement: Contextual Plain-Language Explanations
-The help system SHALL display a clear, accessible overlay detailing the module's DSP purpose, signal routing position, parameter functions, and recommended sonic applications.
+The help system SHALL display a clear, accessible overlay detailing the module's DSP purpose, signal routing position, parameter functions, and recommended sonic applications, anchored accurately to the triggered `?` button in the scaled editor canvas at any window size.
 
 #### Scenario: Reading module explanation
-- **WHEN** the help card for a module is opened
-- **THEN** the overlay presents short, jargon-free explanations formatted with title, description, and key parameter tips
+- **WHEN** the help card for a module is opened at default (`100%`) or resized (`75%`–`200%`) window dimensions
+- **THEN** the overlay presents short, jargon-free explanations formatted with title, description, and key parameter tips, clamped within the visible canvas bounds adjacent to the clicked `?` button
 
 ### Requirement: Intuitive Help Overlay Dismissal
 The help overlay SHALL close automatically whenever the user clicks outside the overlay bounds, clicks the "?" button a second time, or presses the Escape key.

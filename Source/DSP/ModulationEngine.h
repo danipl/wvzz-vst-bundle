@@ -139,6 +139,8 @@ public:
 
         currentLfo1Snap.store(lfo1Val, std::memory_order_relaxed);
         currentLfo2Snap.store(lfo2Val, std::memory_order_relaxed);
+        currentLfo1PhaseNorm.store(static_cast<float>(lfo1Phase / juce::MathConstants<double>::twoPi), std::memory_order_relaxed);
+        currentLfo2PhaseNorm.store(static_cast<float>(lfo2Phase / juce::MathConstants<double>::twoPi), std::memory_order_relaxed);
     }
 
     /**
@@ -162,6 +164,8 @@ public:
 
     [[nodiscard]] float getLfo1Snapshot() const noexcept { return currentLfo1Snap.load(std::memory_order_relaxed); }
     [[nodiscard]] float getLfo2Snapshot() const noexcept { return currentLfo2Snap.load(std::memory_order_relaxed); }
+    [[nodiscard]] float getLfo1Phase() const noexcept { return currentLfo1PhaseNorm.load(std::memory_order_relaxed); }
+    [[nodiscard]] float getLfo2Phase() const noexcept { return currentLfo2PhaseNorm.load(std::memory_order_relaxed); }
 
 private:
     static constexpr int numTargets = 21;
@@ -265,6 +269,8 @@ private:
 
     std::atomic<float> currentLfo1Snap { 0.0f };
     std::atomic<float> currentLfo2Snap { 0.0f };
+    std::atomic<float> currentLfo1PhaseNorm { 0.0f };
+    std::atomic<float> currentLfo2PhaseNorm { 0.0f };
 };
 
 } // namespace camelphat::dsp
