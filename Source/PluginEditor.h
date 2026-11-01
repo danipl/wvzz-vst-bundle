@@ -11,6 +11,7 @@
 #include "UI/HelpOverlayComponent.h"
 #include "UI/XYPadComponent.h"
 #include "UI/StereoVUMeterComponent.h"
+#include "UI/SignalComparisonComponent.h"
 #include <vector>
 #include <memory>
 
@@ -30,6 +31,9 @@ public:
     void showHelp(const juce::String& topicId, juce::Rectangle<int> targetScreenBounds) override;
     void hideHelp() override;
     [[nodiscard]] bool isHelpVisible() const noexcept override;
+
+    void setCenterTab(bool showMonitor);
+    [[nodiscard]] bool isShowingMonitor() const noexcept { return showingMonitor; }
 
 private:
     void timerCallback() override;
@@ -184,6 +188,11 @@ private:
     RotaryControl distXcitaKnob;
 
     // Center Column: Assignable X/Y Pad & Controls
+    juce::TextButton xyTabButton { "X/Y PAD" };
+    juce::TextButton monitorTabButton { "MONITOR" };
+    camelphat::ui::SignalComparisonComponent signalVisualizer;
+    bool showingMonitor { false };
+
     camelphat::ui::XYPadComponent xyPad;
     ComboControl xyXTargetBox;
     ComboControl xyYTargetBox;

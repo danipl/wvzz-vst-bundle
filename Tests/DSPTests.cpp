@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "DSP/AudioVisualizerSource.h"
 #include <iostream>
 #include <vector>
 #include <cmath>
@@ -404,7 +405,16 @@ static void testEditorLayoutAndNonOverlap()
         }
     }
 
-    std::cout << "  -> PASS: Editor instantiates and scales across 810x510, 1080x680, and 1920x1200 with valid child geometry.\n" << std::endl;
+    // Verify center tab switching between X/Y Pad and Signal Monitor
+    auto* cpEditor = dynamic_cast<CamelPhatAudioProcessorEditor*>(editor.get());
+    assert(cpEditor != nullptr);
+    assert(!cpEditor->isShowingMonitor());
+    cpEditor->setCenterTab(true);
+    assert(cpEditor->isShowingMonitor());
+    cpEditor->setCenterTab(false);
+    assert(!cpEditor->isShowingMonitor());
+
+    std::cout << "  -> PASS: Editor instantiates, scales, and toggles Center Tab (X/Y Pad <-> Monitor) with valid geometry.\n" << std::endl;
 }
 
 // ==============================================================================
@@ -494,6 +504,48 @@ static void testInputAndOutputMetering()
     std::cout << "  -> PASS: Dual Input and Output meters report active, finite audio telemetry.\n" << std::endl;
 }
 
+static void testAudioVisualizerSourceFifo()
+{
+    std::cout << "[Test 12] AudioVisualizerSource Lock-Free Ring Buffer..." << std::endl;
+    camelphat::dsp::AudioVisualizerSource source(1024);
+
+    std::vector<float> chL(256, 0.4f);
+    std::vector<float> chR(256, 0.6f);
+    const float* inChannels[2] = { chL.data(), chR.data() };
+
+    source.pushInput(inChannels, 2, 256);
+    assert(source.getNumReadyInput() == 256);
+
+    std::vector<float> readBack(256, 0.0f);
+    int readCount = source.readInput(readBack.data(), 256);
+    assert(readCount == 256);
+    juce::ignoreUnused(readCount);
+    for (float v : readBack)
+    {
+        assert(std::abs(v - 0.5f) < 1e-5f);
+        juce::ignoreUnused(v);
+    }
+
+    assert(source.getNumReadyInput() == 0);
+
+    std::vector<float> outL(128, 0.8f);
+    const float* outChannels[1] = { outL.data() };
+    source.pushOutput(outChannels, 1, 128);
+    assert(source.getNumReadyOutput() == 128);
+
+    std::vector<float> outRead(128, 0.0f);
+    int outReadCount = source.readOutput(outRead.data(), 128);
+    assert(outReadCount == 128);
+    juce::ignoreUnused(outReadCount);
+    for (float v : outRead)
+    {
+        assert(std::abs(v - 0.8f) < 1e-5f);
+        juce::ignoreUnused(v);
+    }
+
+    std::cout << "  -> PASS: AudioVisualizerSource FIFO push and read accurately verified.\n" << std::endl;
+}
+
 int main(int, char*[])
 {
     std::cout << "=====================================================" << std::endl;
@@ -513,6 +565,7 @@ int main(int, char*[])
         testEditorLayoutAndNonOverlap();
         testModulationTargetDelivery();
         testInputAndOutputMetering();
+        testAudioVisualizerSourceFifo();
 
         std::cout << "=====================================================" << std::endl;
         std::cout << "   ALL 7 DSP SUITES PASSED (100% SUCCESS)            " << std::endl;

@@ -49,11 +49,14 @@ target_sources(CamelPhat
         Source/DSP/CompressorModule.h
         Source/DSP/MasterSection.h
         Source/DSP/ModulationEngine.h
+        Source/DSP/AudioVisualizerSource.h
         Source/Presets/FactoryPresets.h
         Source/UI/CamelPhatLookAndFeel.cpp
         Source/UI/CamelPhatLookAndFeel.h
         Source/UI/XYPadComponent.cpp
         Source/UI/XYPadComponent.h
+        Source/UI/SignalComparisonComponent.cpp
+        Source/UI/SignalComparisonComponent.h
 )
 
 target_include_directories(CamelPhat PRIVATE Source)

@@ -5,4 +5,5 @@ DerivedData/
 .idea
 .claude
 skills/
+cmake-build-debug
 

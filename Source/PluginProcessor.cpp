@@ -204,6 +204,7 @@ void CamelPhatAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlo
     masterSection.prepare(spec);
     modEngine.prepare(sampleRate);
     inputMeterSource.reset();
+    visualizerSource.prepare(sampleRate, samplesPerBlock);
 
     // Set oversampling latency on master section and report to host
     const int latency = distortionModule.getLatencyInSamples();
@@ -225,6 +226,7 @@ void CamelPhatAudioProcessor::releaseResources()
     masterSection.reset();
     modEngine.reset();
     inputMeterSource.reset();
+    visualizerSource.reset();
 }
 
 bool CamelPhatAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const
@@ -353,6 +355,9 @@ void CamelPhatAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juc
         juce::AudioBuffer<float> subPass(passbandBuffer.getArrayOfWritePointers(), 2, 0, subBlockSize);
         juce::AudioBuffer<float> subRej(bandRejectBuffer.getArrayOfWritePointers(), 2, 0, subBlockSize);
 
+        // Tap raw incoming signal before input gain is applied
+        visualizerSource.pushInput(subIn.getArrayOfReadPointers(), 2, subBlockSize);
+
         // Apply Input Gain and cache pre-BP buffer
         const float inGainLinear = juce::Decibels::decibelsToGain(curInGain);
         for (int ch = 0; ch < 2; ++ch)
@@ -396,6 +401,9 @@ void CamelPhatAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juc
 
         // 7. Module 7: Master Section (Latency compensation + dry/wet blend + volume + bypass)
         masterSection.process(subPass, subDry, modMasterMix, curMasterVol, masterByp);
+
+        // Tap final processed audio after master section and output volume
+        visualizerSource.pushOutput(subPass.getArrayOfReadPointers(), 2, subBlockSize);
 
         // Copy processed sub-block back to main buffer
         for (int ch = 0; ch < 2; ++ch)

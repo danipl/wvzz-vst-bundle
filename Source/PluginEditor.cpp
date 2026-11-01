@@ -154,6 +154,7 @@ CamelPhatAudioProcessorEditor::CamelPhatAudioProcessorEditor(CamelPhatAudioProce
       eqHelp("magic_eq", *this),
       compHelp("compressor", *this),
       masterHelp("master", *this),
+      signalVisualizer(proc.getVisualizerSource()),
       xyPad(proc.getAPVTS(),
             camelphat::ParameterIDs::xyX,
             camelphat::ParameterIDs::xyY,
@@ -360,6 +361,19 @@ CamelPhatAudioProcessorEditor::CamelPhatAudioProcessorEditor(CamelPhatAudioProce
                camelphat::ui::CamelPhatLookAndFeel::neonAmber);
 
     // 6. Center Column: Assignable X/Y Pad & LFOs
+    auto setupCenterTabBtn = [this](juce::TextButton& btn) {
+        btn.setColour(juce::TextButton::buttonColourId, camelphat::ui::CamelPhatLookAndFeel::cardBg.darker(0.2f));
+        btn.setColour(juce::TextButton::textColourOffId, camelphat::ui::CamelPhatLookAndFeel::textSecondary);
+        contentContainer.addAndMakeVisible(btn);
+    };
+    setupCenterTabBtn(xyTabButton);
+    setupCenterTabBtn(monitorTabButton);
+
+    xyTabButton.onClick = [this] { setCenterTab(false); };
+    monitorTabButton.onClick = [this] { setCenterTab(true); };
+
+    contentContainer.addChildComponent(signalVisualizer);
+
     contentContainer.addAndMakeVisible(xyPad);
     const auto& modTargets = camelphat::getModTargetNames();
     initCombo(xyXTargetBox, camelphat::ParameterIDs::xyXTarget, "X Target", modTargets);
@@ -386,6 +400,8 @@ CamelPhatAudioProcessorEditor::CamelPhatAudioProcessorEditor(CamelPhatAudioProce
             xyPad.setAxisLabels(xIdx >= 0 ? modTargets[xIdx] : "X", modTargets[idx]);
         }
     };
+
+    setCenterTab(false);
 
     const auto& lfoWaves = camelphat::getLFOWaveformNames();
     const auto& syncDivs = camelphat::getLFOSyncDivNames();
@@ -714,10 +730,17 @@ void CamelPhatAudioProcessorEditor::resized()
     // --- CENTER COLUMN ---
     centerModCard.setBounds(centerCol);
     centerModHelp.setBounds(centerModCard.getHeaderHelpBounds());
+
+    auto tabArea = juce::Rectangle<int>(centerCol.getRight() - 170, centerCol.getY() + 5, 140, 18);
+    xyTabButton.setBounds(tabArea.removeFromLeft(68));
+    tabArea.removeFromLeft(4);
+    monitorTabButton.setBounds(tabArea.removeFromLeft(68));
+
     auto centerInner = centerModCard.getContentBounds();
 
-    // XY Pad & Controls
+    // XY Pad & Controls or Signal Visualizer
     auto xyArea = centerInner.removeFromTop(270);
+    signalVisualizer.setBounds(xyArea);
     xyPad.setBounds(xyArea.removeFromTop(175));
 
     xyArea.removeFromTop(4);
@@ -878,4 +901,38 @@ void CamelPhatAudioProcessorEditor::hideHelp()
 bool CamelPhatAudioProcessorEditor::isHelpVisible() const noexcept
 {
     return helpOverlay.isVisible();
+}
+
+void CamelPhatAudioProcessorEditor::setCenterTab(bool showMonitor)
+{
+    showingMonitor = showMonitor;
+
+    xyTabButton.setColour(juce::TextButton::buttonColourId,
+        !showingMonitor ? camelphat::ui::CamelPhatLookAndFeel::neonGreen.withAlpha(0.25f)
+                        : camelphat::ui::CamelPhatLookAndFeel::cardBg.darker(0.2f));
+    xyTabButton.setColour(juce::TextButton::textColourOffId,
+        !showingMonitor ? camelphat::ui::CamelPhatLookAndFeel::neonGreen
+                        : camelphat::ui::CamelPhatLookAndFeel::textSecondary);
+
+    monitorTabButton.setColour(juce::TextButton::buttonColourId,
+        showingMonitor ? camelphat::ui::CamelPhatLookAndFeel::neonCyan.withAlpha(0.25f)
+                       : camelphat::ui::CamelPhatLookAndFeel::cardBg.darker(0.2f));
+    monitorTabButton.setColour(juce::TextButton::textColourOffId,
+        showingMonitor ? camelphat::ui::CamelPhatLookAndFeel::neonCyan
+                       : camelphat::ui::CamelPhatLookAndFeel::textSecondary);
+
+    xyPad.setVisible(!showingMonitor);
+    xyXTargetBox.label.setVisible(!showingMonitor);
+    xyXTargetBox.box.setVisible(!showingMonitor);
+    xyXDepthKnob.slider.setVisible(!showingMonitor);
+    xyXDepthKnob.label.setVisible(!showingMonitor);
+    xyYTargetBox.label.setVisible(!showingMonitor);
+    xyYTargetBox.box.setVisible(!showingMonitor);
+    xyYDepthKnob.slider.setVisible(!showingMonitor);
+    xyYDepthKnob.label.setVisible(!showingMonitor);
+
+    signalVisualizer.setVisible(showingMonitor);
+    centerModCard.setTitle(showingMonitor ? "ANALYSIS & MONITOR" : "MODULATION & X/Y");
+    centerModCard.setAccentColor(showingMonitor ? camelphat::ui::CamelPhatLookAndFeel::neonCyan
+                                               : camelphat::ui::CamelPhatLookAndFeel::neonGreen);
 }

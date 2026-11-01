@@ -12,6 +12,7 @@
 #include "DSP/CompressorModule.h"
 #include "DSP/MasterSection.h"
 #include "DSP/ModulationEngine.h"
+#include "DSP/AudioVisualizerSource.h"
 #include "Presets/FactoryPresets.h"
 
 class InputMeterSource : public camelphat::dsp::IMeterSource
@@ -126,6 +127,8 @@ public:
     const camelphat::dsp::IMeterSource& getInputMeterSource() const noexcept { return inputMeterSource; }
     const camelphat::dsp::CompressorModule& getCompressorModule() const noexcept { return compressorModule; }
     camelphat::dsp::ModulationEngine& getModulationEngine() noexcept { return modEngine; }
+    camelphat::dsp::AudioVisualizerSource& getVisualizerSource() noexcept { return visualizerSource; }
+    const camelphat::dsp::AudioVisualizerSource& getVisualizerSource() const noexcept { return visualizerSource; }
 
     // Dice: Smart parameter randomizer
     void randomizeParameters();
@@ -147,6 +150,7 @@ private:
     camelphat::dsp::MasterSection    masterSection;
     camelphat::dsp::ModulationEngine modEngine;
     InputMeterSource                 inputMeterSource;
+    camelphat::dsp::AudioVisualizerSource visualizerSource;
 
     int currentProgramIndex { 0 };
 
