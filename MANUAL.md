@@ -26,28 +26,53 @@ A practical guide to compiling, installing, and using CamelPhat in your DAW.
 
 ---
 
-## 2. Compilation Guide
+## 2. Compilation & Fast Build Guide
 
-### Step 1: Install Build Tools
+### Quick Build with `make` (Recommended)
+A root [`Makefile`](Makefile) provides simple commands:
+
+| Command | Action |
+| :--- | :--- |
+| `make vst3` | Builds the `.vst3` bundle file into `build/CamelPhat_artefacts/VST3/CamelPhat.vst3` |
+| `make install-vst3` | Builds and copies the `.vst3` bundle directly to `~/Library/Audio/Plug-Ins/VST3/` |
+| `make install-system` | Copies `.vst3` bundle to `/Library/Audio/Plug-Ins/VST3/` (prompts for `sudo` if needed) |
+| `make au` | Builds the Audio Unit (`.component`) bundle |
+| `make install` | Builds both VST3 and AU and copies them to `~/Library/Audio/Plug-Ins/` |
+| `make test` | Runs the quantitative DSP tests and allocation checks |
+| `make validate-au` | Runs Apple's `auval` to test Audio Unit host integration |
+| `make clean` | Cleans the build folder |
+
+---
+
+### Step-by-Step Manual CMake Build
+
+#### Step 1: Install Build Tools
 If not already installed on macOS via Homebrew:
 ```bash
 brew install cmake ninja
 ```
 
-### Step 2: Configure the Project
+#### Step 2: Configure the Project
 Run CMake with the Ninja generator in the project root:
 ```bash
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 ```
 *Note: CMake automatically downloads and configures JUCE 8.0.4 via FetchContent.*
 
-### Step 3: Build the Binaries
-Build all plugin targets and the offline test runner:
+#### Step 3: Build the `.vst3` Bundle
+To build only the `.vst3` bundle:
+```bash
+cmake --build build --target CamelPhat_VST3
+```
+The compiled bundle will be located at:
+`build/CamelPhat_artefacts/VST3/CamelPhat.vst3`
+
+To build all formats (VST3, AU, Standalone App, and Test suite):
 ```bash
 cmake --build build
 ```
 
-### Step 4: Run the Quantitative Test Suite
+#### Step 4: Run the Quantitative Test Suite
 Verify that all DSP algorithms, filter stabilities, and zero-allocation assertions pass:
 ```bash
 ctest --test-dir build --output-on-failure
@@ -55,23 +80,36 @@ ctest --test-dir build --output-on-failure
 
 ---
 
-## 3. macOS Installation
+## 3. macOS Installation Guide
 
-After compilation, copy the generated bundles into your macOS user audio plug-in folders:
+On macOS, a `.vst3` plugin is a bundle directory containing the universal binary (`arm64` and `x86_64`) and manifest files.
 
+### Option A: Install for Current User (`~/Library/Audio/Plug-Ins/VST3`)
+No root privileges required. Most DAWs (like Ableton Live and Reaper) scan this folder automatically:
 ```bash
-# 1. Create target directories if they do not exist
-mkdir -p ~/Library/Audio/Plug-Ins/Components ~/Library/Audio/Plug-Ins/VST3
-
-# 2. Copy the AU (.component) and VST3 (.vst3) bundles
-cp -R build/CamelPhat_artefacts/AU/CamelPhat.component ~/Library/Audio/Plug-Ins/Components/
+mkdir -p ~/Library/Audio/Plug-Ins/VST3
 cp -R build/CamelPhat_artefacts/VST3/CamelPhat.vst3 ~/Library/Audio/Plug-Ins/VST3/
+```
+*(Or simply run `make install-vst3`)*.
 
-# 3. Reset the macOS AudioComponentRegistrar daemon
+### Option B: Install System-Wide (`/Library/Audio/Plug-Ins/VST3`)
+Makes the plugin available to all user accounts on the machine (requires `sudo`):
+```bash
+sudo mkdir -p /Library/Audio/Plug-Ins/VST3
+sudo cp -R build/CamelPhat_artefacts/VST3/CamelPhat.vst3 /Library/Audio/Plug-Ins/VST3/
+```
+*(Or simply run `make install-system`)*.
+
+### Installing Audio Unit (AU)
+To install the Audio Unit format as well:
+```bash
+mkdir -p ~/Library/Audio/Plug-Ins/Components
+cp -R build/CamelPhat_artefacts/AU/CamelPhat.component ~/Library/Audio/Plug-Ins/Components/
 killall -9 AudioComponentRegistrar 2>/dev/null || true
 ```
+*(Or simply run `make install`)*.
 
-### Validate Audio Unit
+#### Validate Audio Unit
 Run Apple's `auval` utility to confirm validation:
 ```bash
 auval -v aumf Cph3 CamA

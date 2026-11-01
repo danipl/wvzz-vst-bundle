@@ -32,26 +32,39 @@ For detailed compilation instructions, DAW setup (Ableton Live, Logic Pro, Reape
 
 ---
 
-## Quick Start (Building on macOS)
+## Quick Start (Using `make`)
 
-### 1. Build
+A [`Makefile`](Makefile) is provided in the repository root for one-command builds and installation:
+
+```bash
+# 1. Build the .vst3 bundle and install to ~/Library/Audio/Plug-Ins/VST3/
+make install-vst3
+
+# Or build and install both VST3 and AU bundles:
+make install
+
+# Or install VST3 system-wide to /Library/Audio/Plug-Ins/VST3/ (requires sudo):
+make install-system
+
+# Run tests:
+make test
+```
+
+### Manual CMake Commands
+If you prefer running CMake directly:
 ```bash
 # Configure with CMake and Ninja
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 
-# Compile all targets
+# Build the .vst3 bundle directly:
+cmake --build build --target CamelPhat_VST3
+
+# Build all formats (VST3, AU, App, Tests):
 cmake --build build
 
-# Run automated test suite
-ctest --test-dir build --output-on-failure
-```
-
-### 2. Install to User Plugin Directory
-```bash
-mkdir -p ~/Library/Audio/Plug-Ins/Components ~/Library/Audio/Plug-Ins/VST3
-cp -R build/CamelPhat_artefacts/AU/CamelPhat.component ~/Library/Audio/Plug-Ins/Components/
+# Copy .vst3 bundle to user audio plug-ins folder:
+mkdir -p ~/Library/Audio/Plug-Ins/VST3
 cp -R build/CamelPhat_artefacts/VST3/CamelPhat.vst3 ~/Library/Audio/Plug-Ins/VST3/
-killall -9 AudioComponentRegistrar 2>/dev/null || true
 ```
 
 ---
