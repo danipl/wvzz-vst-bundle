@@ -11,6 +11,8 @@
 #include "DSP/MagicEQ.h"
 #include "DSP/CompressorModule.h"
 #include "DSP/MasterSection.h"
+#include "DSP/ModulationEngine.h"
+#include "Presets/FactoryPresets.h"
 
 class CamelPhatAudioProcessor : public juce::AudioProcessor
 {
@@ -47,6 +49,10 @@ public:
     juce::AudioProcessorValueTreeState& getAPVTS() noexcept { return apvts; }
     const camelphat::ParameterPointers& getParameters() const noexcept { return paramPointers; }
     const camelphat::dsp::MasterSection& getMasterSection() const noexcept { return masterSection; }
+    camelphat::dsp::ModulationEngine& getModulationEngine() noexcept { return modEngine; }
+
+    // Dice: Smart parameter randomizer
+    void randomizeParameters();
 
 private:
     void initSmoothers(double sampleRate) noexcept;
@@ -55,7 +61,7 @@ private:
     juce::AudioProcessorValueTreeState apvts;
     camelphat::ParameterPointers paramPointers;
 
-    // Core DSP Modules (SRP & ISP interfaces)
+    // Core DSP Modules
     camelphat::dsp::BPFilter         bpFilter;
     camelphat::dsp::DistortionModule distortionModule;
     camelphat::dsp::MMFilter         mmFilter;
@@ -63,43 +69,50 @@ private:
     camelphat::dsp::MagicEQ          magicEq;
     camelphat::dsp::CompressorModule compressorModule;
     camelphat::dsp::MasterSection    masterSection;
+    camelphat::dsp::ModulationEngine modEngine;
 
-    // Pre-allocated scratch buffers (zero heap allocations in processBlock)
+    int currentProgramIndex { 0 };
+
+    // Pre-allocated scratch buffers
+    juce::AudioBuffer<float> preBpInputBuffer;
     juce::AudioBuffer<float> globalDryBuffer;
     juce::AudioBuffer<float> bandRejectBuffer;
     juce::AudioBuffer<float> passbandBuffer;
 
-    // Parameter smoothing to prevent zipper noise
-    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> bpCutoffLowSmoothed;
-    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> bpCutoffHighSmoothed;
-    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> bpResonanceSmoothed;
-    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> bpMixSmoothed;
-    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> bandRejectMixSmoothed;
+    // Parameter smoothing (10-20ms ramps)
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> inputGainSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> bpLowCutSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> bpHighCutSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> bpLowResSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> bpHighResSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> bpBrMixSmoothed;
 
-    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> distTubeSmoothed;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> distMechSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> distTubeSmoothed;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> distBitSmoothed;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> distXcitaSmoothed;
-    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> distMixSmoothed;
 
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> mmCutoffSmoothed;
-    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> mmResonanceSmoothed;
-    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> mmEnvAmountSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> mmResSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> mmMixSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> mmEnvDepthSmoothed;
 
-    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> flangerRateSmoothed;
-    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> flangerDepthSmoothed;
-    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> flangerFeedbackSmoothed;
-    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> flangerMixSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> flgRateSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> flgAmountSmoothed;
 
-    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> magicEqAmountSmoothed;
-    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> magicEqFreqSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> meqAmountSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> meqTuneSmoothed;
 
-    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> compThresholdSmoothed;
-    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> compRatioSmoothed;
-    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> compMixSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> compAmountSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> compReleaseSmoothed;
 
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> masterMixSmoothed;
-    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> masterOutputGainSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> masterVolSmoothed;
+
+    // bp_link tracking
+    std::atomic<bool> isUpdatingLink { false };
+    float lastLowCut { 20.0f };
+    float lastHighCut { 20000.0f };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(CamelPhatAudioProcessor)
 };

@@ -4,12 +4,19 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <atomic>
 #include <cmath>
+#include <vector>
 
 namespace camelphat::dsp {
 
 /**
- * @brief Master mixing stage, output volume control, atomic VU metering, and NaN/Inf safety clamp.
- * Adheres to IMeterSource and IAudioProcessorModule interfaces.
+ * @brief Module 7: Master Section
+ *
+ * - Global Dry Signal Delay Line for latency compensation (matching distortion oversampling)
+ * - Click-free crossfaded master bypass
+ * - master_mix: 0.0 to 1.0 (default 1.0)
+ * - master_vol: -36.0 to +12.0 dB (default 0.0 dB)
+ * - Atomic stereo peak & RMS VU metering
+ * - Master NaN/Inf sanitization & speaker protection clamp
  */
 class MasterSection : public IDSPModule, public IMeterSource
 {
@@ -20,6 +27,12 @@ public:
     void prepare(const juce::dsp::ProcessSpec& spec) override
     {
         sampleRate = spec.sampleRate;
+
+        // Pre-allocate dry delay buffer (up to 2048 samples latency compensation)
+        maxDelaySamples = 2048;
+        dryDelayBufferL.assign(static_cast<size_t>(maxDelaySamples), 0.0f);
+        dryDelayBufferR.assign(static_cast<size_t>(maxDelaySamples), 0.0f);
+
         reset();
     }
 
@@ -29,15 +42,26 @@ public:
         peakRight.store(0.0f, std::memory_order_relaxed);
         rmsLeft.store(0.0f, std::memory_order_relaxed);
         rmsRight.store(0.0f, std::memory_order_relaxed);
+
+        std::fill(dryDelayBufferL.begin(), dryDelayBufferL.end(), 0.0f);
+        std::fill(dryDelayBufferR.begin(), dryDelayBufferR.end(), 0.0f);
+        delayWriteIndex = 0;
+    }
+
+    void setLatencyCompensation(int delaySamples) noexcept
+    {
+        latencySamples = juce::jlimit(0, maxDelaySamples - 1, delaySamples);
     }
 
     /**
-     * @brief Blends wet chain with global dry buffer, applies master gain, clamps NaNs, and computes metering.
+     * @brief Blends wet chain with latency-compensated dry buffer, applies master gain,
+     * handles click-free master bypass, clamps NaNs, and computes metering.
      */
     void process(juce::AudioBuffer<float>& wetBuffer,
                  const juce::AudioBuffer<float>& dryBuffer,
                  float mixNorm,
-                 float outputGainDb) noexcept
+                 float outputGainDb,
+                 bool bypass = false) noexcept
     {
         const int numSamples = wetBuffer.getNumSamples();
         const int numChannels = juce::jmin(2, wetBuffer.getNumChannels(), dryBuffer.getNumChannels());
@@ -56,16 +80,43 @@ public:
         float* wetL = wetBuffer.getWritePointer(0);
         const float* dryL = dryBuffer.getReadPointer(0);
 
-        float* wetR = numChannels > 1 ? wetBuffer.getWritePointer(1) : nullptr;
-        const float* dryR = numChannels > 1 ? dryBuffer.getReadPointer(1) : nullptr;
+        float* wetR = (numChannels > 1) ? wetBuffer.getWritePointer(1) : nullptr;
+        const float* dryR = (numChannels > 1) ? dryBuffer.getReadPointer(1) : nullptr;
 
         for (int i = 0; i < numSamples; ++i)
         {
+            const float rawDryL = dryL[i];
+            const float rawDryR = (dryR != nullptr) ? dryR[i] : rawDryL;
+
+            // Write to dry delay line
+            dryDelayBufferL[static_cast<size_t>(delayWriteIndex)] = rawDryL;
+            dryDelayBufferR[static_cast<size_t>(delayWriteIndex)] = rawDryR;
+
+            // Read latency-compensated dry sample
+            int readIdx = delayWriteIndex - latencySamples;
+            if (readIdx < 0)
+                readIdx += maxDelaySamples;
+
+            const float delayedDryL = dryDelayBufferL[static_cast<size_t>(readIdx)];
+            const float delayedDryR = dryDelayBufferR[static_cast<size_t>(readIdx)];
+
+            if (++delayWriteIndex >= maxDelaySamples)
+                delayWriteIndex = 0;
+
+            if (bypass)
+            {
+                // Unprocessed delayed dry pass-through
+                wetL[i] = delayedDryL;
+                if (wetR != nullptr)
+                    wetR[i] = delayedDryR;
+                continue;
+            }
+
             // Channel 0 (Left)
-            float sampleL = (1.0f - mix) * dryL[i] + mix * wetL[i];
+            float sampleL = (1.0f - mix) * delayedDryL + mix * wetL[i];
             sampleL *= linearGain;
 
-            // Master NaN / Inf sanitization and speaker protection clamp
+            // Speaker protection clamp and NaN sanitize
             if (!std::isfinite(sampleL))
                 sampleL = 0.0f;
             else
@@ -77,9 +128,9 @@ public:
             blockSumSqL += sampleL * sampleL;
 
             // Channel 1 (Right)
-            if (wetR != nullptr && dryR != nullptr)
+            if (wetR != nullptr)
             {
-                float sampleR = (1.0f - mix) * dryR[i] + mix * wetR[i];
+                float sampleR = (1.0f - mix) * delayedDryR + mix * wetR[i];
                 sampleR *= linearGain;
 
                 if (!std::isfinite(sampleR))
@@ -94,7 +145,7 @@ public:
             }
         }
 
-        // Update atomic metering values with smooth decay
+        // Update atomic metering values
         const float blockRmsL = std::sqrt(blockSumSqL / static_cast<float>(numSamples));
         const float blockRmsR = (wetR != nullptr) ? std::sqrt(blockSumSqR / static_cast<float>(numSamples)) : blockRmsL;
 
@@ -120,12 +171,18 @@ private:
     static inline void updateMeter(std::atomic<float>& target, float newBlockValue) noexcept
     {
         const float current = target.load(std::memory_order_relaxed);
-        // Instant attack, fast decay
         const float updated = (newBlockValue > current) ? newBlockValue : (current * 0.85f + newBlockValue * 0.15f);
         target.store(updated, std::memory_order_relaxed);
     }
 
     double sampleRate { 44100.0 };
+
+    int maxDelaySamples { 2048 };
+    int latencySamples { 0 };
+    int delayWriteIndex { 0 };
+
+    std::vector<float> dryDelayBufferL;
+    std::vector<float> dryDelayBufferR;
 
     std::atomic<float> peakLeft  { 0.0f };
     std::atomic<float> peakRight { 0.0f };

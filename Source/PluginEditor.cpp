@@ -3,338 +3,438 @@
 CamelPhatAudioProcessorEditor::CamelPhatAudioProcessorEditor(CamelPhatAudioProcessor& proc)
     : AudioProcessorEditor(proc),
       audioProcessor(proc),
-      bpFilterCard("BAND-PASS FILTER", camelphat::ui::CamelPhatLookAndFeel::neonCyan),
-      distCard("DISTORTION & CRUSH", camelphat::ui::CamelPhatLookAndFeel::neonAmber),
-      mmFilterCard("MULTI-MODE FILTER", camelphat::ui::CamelPhatLookAndFeel::neonGreen),
+      bpFilterCard("BP FILTER & SPLIT", camelphat::ui::CamelPhatLookAndFeel::neonCyan),
+      distCard("DISTORTION", camelphat::ui::CamelPhatLookAndFeel::neonAmber),
+      centerModCard("MODULATION & X/Y", camelphat::ui::CamelPhatLookAndFeel::neonGreen),
+      mmFilterCard("MM FILTER", camelphat::ui::CamelPhatLookAndFeel::neonGreen),
       flangerCard("FLANGER", camelphat::ui::CamelPhatLookAndFeel::neonCyan),
       magicEqCard("MAGIC EQ", camelphat::ui::CamelPhatLookAndFeel::neonAmber),
-      compCard("COMPRESSOR & PHAT", camelphat::ui::CamelPhatLookAndFeel::neonGreen),
-      masterCard("MASTER OUTPUT", camelphat::ui::CamelPhatLookAndFeel::neonGreen),
+      compCard("COMPRESSOR", camelphat::ui::CamelPhatLookAndFeel::neonGreen),
+      masterCard("MASTER", camelphat::ui::CamelPhatLookAndFeel::neonGreen),
       bpHelp("bp_filter", *this),
       distHelp("distortion", *this),
+      centerModHelp("xy_pad", *this),
       mmHelp("mm_filter", *this),
       flangerHelp("flanger", *this),
       eqHelp("magic_eq", *this),
       compHelp("compressor", *this),
       masterHelp("master", *this),
-      xyFilterHelp("xy_filter", *this),
-      xyDistHelp("xy_dist", *this),
-      filterXYPad(proc.getAPVTS(),
-                  camelphat::ParameterIDs::mmCutoff,
-                  camelphat::ParameterIDs::mmResonance,
-                  "FILTER X/Y", "Cutoff", "Res",
-                  camelphat::ui::CamelPhatLookAndFeel::neonGreen),
-      distXYPad(proc.getAPVTS(),
-                camelphat::ParameterIDs::distTube,
-                camelphat::ParameterIDs::distMech,
-                "DRIVE X/Y", "Tube", "Mech",
-                camelphat::ui::CamelPhatLookAndFeel::neonAmber),
+      xyPad(proc.getAPVTS(),
+            camelphat::ParameterIDs::xyX,
+            camelphat::ParameterIDs::xyY,
+            "X/Y PAD", "X Axis", "Y Axis",
+            camelphat::ui::CamelPhatLookAndFeel::neonGreen),
       vuMeter(proc.getMasterSection())
 {
     setLookAndFeel(&lookAndFeel);
 
-    // 1. Add Card Containers
-    addAndMakeVisible(bpFilterCard);
-    addAndMakeVisible(distCard);
-    addAndMakeVisible(mmFilterCard);
-    addAndMakeVisible(flangerCard);
-    addAndMakeVisible(magicEqCard);
-    addAndMakeVisible(compCard);
-    addAndMakeVisible(masterCard);
+    // Root content container for 900x560 canvas scaling
+    addAndMakeVisible(contentContainer);
+    contentContainer.setBounds(0, 0, 900, 560);
 
-    // 2. Add Help Buttons
-    addAndMakeVisible(bpHelp);
-    addAndMakeVisible(distHelp);
-    addAndMakeVisible(mmHelp);
-    addAndMakeVisible(flangerHelp);
-    addAndMakeVisible(eqHelp);
-    addAndMakeVisible(compHelp);
-    addAndMakeVisible(masterHelp);
-    addAndMakeVisible(xyFilterHelp);
-    addAndMakeVisible(xyDistHelp);
+    // 1. Module Cards
+    contentContainer.addAndMakeVisible(bpFilterCard);
+    contentContainer.addAndMakeVisible(distCard);
+    contentContainer.addAndMakeVisible(centerModCard);
+    contentContainer.addAndMakeVisible(mmFilterCard);
+    contentContainer.addAndMakeVisible(flangerCard);
+    contentContainer.addAndMakeVisible(magicEqCard);
+    contentContainer.addAndMakeVisible(compCard);
+    contentContainer.addAndMakeVisible(masterCard);
 
-    // 3. Add XY Pads & VU Meter
-    addAndMakeVisible(filterXYPad);
-    addAndMakeVisible(distXYPad);
-    addAndMakeVisible(vuMeter);
+    // 2. Help Buttons
+    contentContainer.addAndMakeVisible(bpHelp);
+    contentContainer.addAndMakeVisible(distHelp);
+    contentContainer.addAndMakeVisible(centerModHelp);
+    contentContainer.addAndMakeVisible(mmHelp);
+    contentContainer.addAndMakeVisible(flangerHelp);
+    contentContainer.addAndMakeVisible(eqHelp);
+    contentContainer.addAndMakeVisible(compHelp);
+    contentContainer.addAndMakeVisible(masterHelp);
 
-    // 4. Initialise Rotary Sliders & Attachments
-    // BP Filter
-    initRotary(bpCutLow, camelphat::ParameterIDs::bpCutoffLow, "Low Cut");
-    initRotary(bpCutHigh, camelphat::ParameterIDs::bpCutoffHigh, "High Cut");
-    initRotary(bpRes, camelphat::ParameterIDs::bpResonance, "Res");
-    initRotary(bpMix, camelphat::ParameterIDs::bpMix, "BP Mix");
-    initRotary(bpRejectMix, camelphat::ParameterIDs::bandRejectMix, "BR Mix");
+    // 3. Preset Selector
+    const auto& presets = camelphat::getFactoryPresets();
+    for (size_t i = 0; i < presets.size(); ++i)
+        presetSelector.addItem(presets[i].name, static_cast<int>(i + 1));
+    presetSelector.setSelectedId(proc.getCurrentProgram() + 1, juce::dontSendNotification);
+    presetSelector.onChange = [this] {
+        audioProcessor.setCurrentProgram(presetSelector.getSelectedId() - 1);
+    };
+    contentContainer.addAndMakeVisible(presetSelector);
 
-    // Distortion
-    initRotary(distTube, camelphat::ParameterIDs::distTube, "Tube");
-    initRotary(distMech, camelphat::ParameterIDs::distMech, "Mech");
-    initRotary(distBit, camelphat::ParameterIDs::distBit, "Bit");
-    initRotary(distXcita, camelphat::ParameterIDs::distXcita, "Xcita");
-    initRotary(distMix, camelphat::ParameterIDs::distMix, "Mix");
+    // 4. Left Column: BP Filter
+    initToggle(bpBypassToggle, camelphat::ParameterIDs::bpBypass, "BYPASS");
+    initToggle(bpLinkToggle, camelphat::ParameterIDs::bpLink, "LINK");
 
-    // MM Filter
-    initRotary(mmCutoff, camelphat::ParameterIDs::mmCutoff, "Cutoff");
-    initRotary(mmRes, camelphat::ParameterIDs::mmResonance, "Res");
-    initRotary(mmEnvAmount, camelphat::ParameterIDs::mmEnvAmount, "Env Amt");
-    initRotary(mmEnvAttack, camelphat::ParameterIDs::mmEnvAttack, "Attack");
-    initRotary(mmEnvRelease, camelphat::ParameterIDs::mmEnvRelease, "Release");
+    bpLowCutSlider.setSliderStyle(juce::Slider::LinearVertical);
+    bpLowCutSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+    bpLowCutSlider.setPopupDisplayEnabled(true, false, this);
+    contentContainer.addAndMakeVisible(bpLowCutSlider);
+    bpLowCutAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        proc.getAPVTS(), camelphat::ParameterIDs::bpLowCut, bpLowCutSlider);
 
-    mmModeBox.addItem("Low-Pass 12dB", 1);
-    mmModeBox.addItem("Band-Pass", 2);
-    mmModeBox.addItem("High-Pass", 3);
-    mmModeBox.setJustificationType(juce::Justification::centred);
-    addAndMakeVisible(mmModeBox);
-    mmModeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
-        proc.getAPVTS(), camelphat::ParameterIDs::mmMode, mmModeBox);
+    bpHighCutSlider.setSliderStyle(juce::Slider::LinearVertical);
+    bpHighCutSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+    bpHighCutSlider.setPopupDisplayEnabled(true, false, this);
+    contentContainer.addAndMakeVisible(bpHighCutSlider);
+    bpHighCutAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        proc.getAPVTS(), camelphat::ParameterIDs::bpHighCut, bpHighCutSlider);
 
-    // Flanger
-    initRotary(flangerRate, camelphat::ParameterIDs::flangerRate, "Rate");
-    initRotary(flangerDepth, camelphat::ParameterIDs::flangerDepth, "Depth");
-    initRotary(flangerFeedback, camelphat::ParameterIDs::flangerFeedback, "Feedb");
-    initRotary(flangerMix, camelphat::ParameterIDs::flangerMix, "Mix");
+    bpLowCutLabel.setText("Low Cut", juce::dontSendNotification);
+    bpLowCutLabel.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+    bpLowCutLabel.setJustificationType(juce::Justification::centred);
+    contentContainer.addAndMakeVisible(bpLowCutLabel);
 
-    // Magic EQ
-    initRotary(magicFreq, camelphat::ParameterIDs::magicEqFrequency, "Freq");
-    initRotary(magicAmount, camelphat::ParameterIDs::magicEqAmount, "Amount");
+    bpHighCutLabel.setText("High Cut", juce::dontSendNotification);
+    bpHighCutLabel.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+    bpHighCutLabel.setJustificationType(juce::Justification::centred);
+    contentContainer.addAndMakeVisible(bpHighCutLabel);
 
-    // Compressor
-    initRotary(compThresh, camelphat::ParameterIDs::compThreshold, "Thresh");
-    initRotary(compRatio, camelphat::ParameterIDs::compRatio, "Ratio");
-    initRotary(compAttack, camelphat::ParameterIDs::compAttack, "Attack");
-    initRotary(compRelease, camelphat::ParameterIDs::compRelease, "Release");
-    initRotary(compMix, camelphat::ParameterIDs::compMix, "Mix");
+    initRotary(bpLowResKnob, camelphat::ParameterIDs::bpLowRes, "Low Res");
+    initRotary(bpHighResKnob, camelphat::ParameterIDs::bpHighRes, "High Res");
+    initRotary(bpBrMixKnob, camelphat::ParameterIDs::bpBrMix, "BR Mix");
 
-    compPhatToggle.setButtonText("PHAT MODE");
-    addAndMakeVisible(compPhatToggle);
-    compPhatAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-        proc.getAPVTS(), camelphat::ParameterIDs::compPhatMode, compPhatToggle);
+    // Left Column: Distortion
+    initToggle(distBypassToggle, camelphat::ParameterIDs::distBypass, "BYPASS");
+    initRotary(distMechKnob, camelphat::ParameterIDs::distMech, "Mech");
+    initRotary(distTubeKnob, camelphat::ParameterIDs::distTube, "Tube");
+    initRotary(distBitKnob, camelphat::ParameterIDs::distBit, "Bitcrush");
+    initRotary(distXcitaKnob, camelphat::ParameterIDs::distXcita, "Xcita");
 
-    // Master
-    initRotary(masterMix, camelphat::ParameterIDs::masterMix, "Dry/Wet");
-    initRotary(masterGain, camelphat::ParameterIDs::masterOutputGain, "Out Gain");
+    // Center Column: Assignable X/Y Pad & LFOs
+    contentContainer.addAndMakeVisible(xyPad);
+    const auto& modTargets = camelphat::getModTargetNames();
+    initCombo(xyXTargetBox, camelphat::ParameterIDs::xyXTarget, "X Target", modTargets);
+    initCombo(xyYTargetBox, camelphat::ParameterIDs::xyYTarget, "Y Target", modTargets);
+    initRotary(xyXDepthKnob, camelphat::ParameterIDs::xyXDepth, "X Depth", true);
+    initRotary(xyYDepthKnob, camelphat::ParameterIDs::xyYDepth, "Y Depth", true);
 
-    // 5. Help Overlay (always top)
-    addAndMakeVisible(helpOverlay);
+    const auto& lfoWaves = camelphat::getLFOWaveformNames();
+    const auto& syncDivs = camelphat::getLFOSyncDivNames();
 
-    // Modern widescreen layout
-    setSize(920, 600);
-    setResizable(false, false);
+    initCombo(lfo1WaveBox, camelphat::ParameterIDs::lfo1Wave, "LFO1 Wave", lfoWaves);
+    initCombo(lfo1TargetBox, camelphat::ParameterIDs::lfo1Target, "Target", modTargets);
+    initCombo(lfo1SyncDivBox, camelphat::ParameterIDs::lfo1SyncDiv, "Sync Div", syncDivs);
+    initToggle(lfo1SyncToggle, camelphat::ParameterIDs::lfo1Sync, "SYNC");
+    initRotary(lfo1RateKnob, camelphat::ParameterIDs::lfo1Rate, "Rate");
+    initRotary(lfo1DepthKnob, camelphat::ParameterIDs::lfo1Depth, "Depth", true);
+
+    initCombo(lfo2WaveBox, camelphat::ParameterIDs::lfo2Wave, "LFO2 Wave", lfoWaves);
+    initCombo(lfo2TargetBox, camelphat::ParameterIDs::lfo2Target, "Target", modTargets);
+    initCombo(lfo2SyncDivBox, camelphat::ParameterIDs::lfo2SyncDiv, "Sync Div", syncDivs);
+    initToggle(lfo2SyncToggle, camelphat::ParameterIDs::lfo2Sync, "SYNC");
+    initRotary(lfo2RateKnob, camelphat::ParameterIDs::lfo2Rate, "Rate");
+    initRotary(lfo2DepthKnob, camelphat::ParameterIDs::lfo2Depth, "Depth", true);
+
+    // Right Column: MM Filter
+    initToggle(mmBypassToggle, camelphat::ParameterIDs::mmBypass, "BYPASS");
+    initCombo(mmTypeBox, camelphat::ParameterIDs::mmType, "Type", camelphat::getMMFilterTypeNames());
+    initRotary(mmCutoffKnob, camelphat::ParameterIDs::mmCutoff, "Cutoff");
+    initRotary(mmResKnob, camelphat::ParameterIDs::mmRes, "Res");
+    initRotary(mmMixKnob, camelphat::ParameterIDs::mmMix, "Mix");
+    initRotary(mmEnvAttKnob, camelphat::ParameterIDs::mmEnvAtt, "Attack");
+    initRotary(mmEnvRelKnob, camelphat::ParameterIDs::mmEnvRel, "Release");
+    initRotary(mmEnvDepthKnob, camelphat::ParameterIDs::mmEnvDepth, "Env Mod", true);
+
+    // Right Column: Flanger
+    initToggle(flgBypassToggle, camelphat::ParameterIDs::flgBypass, "BYPASS");
+    initRotary(flgRateKnob, camelphat::ParameterIDs::flgRate, "Rate");
+    initRotary(flgAmountKnob, camelphat::ParameterIDs::flgAmount, "Amount");
+
+    // Right Column: Magic EQ
+    initToggle(meqBypassToggle, camelphat::ParameterIDs::meqBypass, "BYPASS");
+    initToggle(meqPhatToggle, camelphat::ParameterIDs::meqPhat, "PHAT");
+    initRotary(meqAmountKnob, camelphat::ParameterIDs::meqAmount, "Amount");
+    initRotary(meqTuneKnob, camelphat::ParameterIDs::meqTune, "Tune");
+
+    // Right Column: Compressor
+    initToggle(compBypassToggle, camelphat::ParameterIDs::compBypass, "BYPASS");
+    initToggle(compPhatToggle, camelphat::ParameterIDs::compPhat, "PHAT");
+    initRotary(compAmountKnob, camelphat::ParameterIDs::compAmount, "Amount");
+    initRotary(compReleaseKnob, camelphat::ParameterIDs::compRelease, "Release");
+
+    // Right Column: Master
+    initToggle(masterBypassToggle, camelphat::ParameterIDs::masterBypass, "BYPASS");
+    initRotary(inputGainKnob, camelphat::ParameterIDs::inputGain, "In Gain");
+    initRotary(masterMixKnob, camelphat::ParameterIDs::masterMix, "Dry/Wet");
+    initRotary(masterVolKnob, camelphat::ParameterIDs::masterVol, "Volume");
+
+    diceButton.setButtonText("DICE");
+    diceButton.onClick = [this] { audioProcessor.randomizeParameters(); };
+    contentContainer.addAndMakeVisible(diceButton);
+
+    contentContainer.addAndMakeVisible(vuMeter);
+
+    // Help Overlay (top layer)
+    contentContainer.addAndMakeVisible(helpOverlay);
+
+    // Setup Fixed-Aspect-Ratio resizable window (900x560, 75% to 200%)
+    setResizable(true, true);
+    setResizeLimits(675, 420, 1800, 1120);
+    getConstrainer()->setFixedAspectRatio(900.0 / 560.0);
+    setSize(900, 560);
+
+    startTimerHz(30);
 }
 
 CamelPhatAudioProcessorEditor::~CamelPhatAudioProcessorEditor()
 {
+    stopTimer();
     setLookAndFeel(nullptr);
 }
 
-void CamelPhatAudioProcessorEditor::initRotary(RotaryControl& ctrl, const juce::String& paramId, const juce::String& labelText)
+void CamelPhatAudioProcessorEditor::timerCallback()
+{
+    // Update preset selector if changed externally
+    const int currentProg = audioProcessor.getCurrentProgram();
+    if (presetSelector.getSelectedId() != currentProg + 1)
+        presetSelector.setSelectedId(currentProg + 1, juce::dontSendNotification);
+}
+
+void CamelPhatAudioProcessorEditor::initRotary(RotaryControl& ctrl, const juce::String& paramId, const juce::String& labelText, bool isBipolar)
 {
     ctrl.slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     ctrl.slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     ctrl.slider.setPopupDisplayEnabled(true, false, this);
-    addAndMakeVisible(ctrl.slider);
+    contentContainer.addAndMakeVisible(ctrl.slider);
 
     ctrl.label.setText(labelText, juce::dontSendNotification);
-    ctrl.label.setFont(juce::FontOptions(11.0f, juce::Font::bold));
+    ctrl.label.setFont(juce::FontOptions(10.0f, juce::Font::bold));
     ctrl.label.setJustificationType(juce::Justification::centred);
     ctrl.label.setColour(juce::Label::textColourId, camelphat::ui::CamelPhatLookAndFeel::textSecondary);
-    addAndMakeVisible(ctrl.label);
+    contentContainer.addAndMakeVisible(ctrl.label);
 
     ctrl.attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), paramId, ctrl.slider);
 }
 
+void CamelPhatAudioProcessorEditor::initToggle(ToggleControl& ctrl, const juce::String& paramId, const juce::String& text)
+{
+    ctrl.button.setButtonText(text);
+    contentContainer.addAndMakeVisible(ctrl.button);
+    ctrl.attachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+        audioProcessor.getAPVTS(), paramId, ctrl.button);
+}
+
+void CamelPhatAudioProcessorEditor::initCombo(ComboControl& ctrl, const juce::String& paramId, const juce::String& labelText, const juce::StringArray& items)
+{
+    ctrl.box.addItemList(items, 1);
+    ctrl.box.setJustificationType(juce::Justification::centred);
+    contentContainer.addAndMakeVisible(ctrl.box);
+
+    ctrl.label.setText(labelText, juce::dontSendNotification);
+    ctrl.label.setFont(juce::FontOptions(9.5f, juce::Font::plain));
+    ctrl.label.setJustificationType(juce::Justification::centredLeft);
+    ctrl.label.setColour(juce::Label::textColourId, camelphat::ui::CamelPhatLookAndFeel::textSecondary);
+    contentContainer.addAndMakeVisible(ctrl.label);
+
+    ctrl.attachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+        audioProcessor.getAPVTS(), paramId, ctrl.box);
+}
+
 void CamelPhatAudioProcessorEditor::paint(juce::Graphics& g)
 {
-    // Background gradient
-    juce::ColourGradient bgGrad(camelphat::ui::CamelPhatLookAndFeel::bgBase.brighter(0.04f), 0, 0,
-                                camelphat::ui::CamelPhatLookAndFeel::bgBase, 0, static_cast<float>(getHeight()), false);
-    g.setGradientFill(bgGrad);
-    g.fillAll();
-
-    // Top Title Bar
-    g.setColour(camelphat::ui::CamelPhatLookAndFeel::cardBorder.withAlpha(0.4f));
-    g.drawHorizontalLine(44, 0.0f, static_cast<float>(getWidth()));
-
-    // Title & Logo
-    g.setColour(camelphat::ui::CamelPhatLookAndFeel::neonGreen);
-    g.setFont(juce::FontOptions(20.0f, juce::Font::bold));
-    g.drawText("CAMELPHAT", 16, 0, 160, 44, juce::Justification::centredLeft);
-
-    g.setColour(camelphat::ui::CamelPhatLookAndFeel::textSecondary);
-    g.setFont(juce::FontOptions(11.0f, juce::Font::plain));
-    g.drawText("MULTI-EFFECT SOUND SHAPER // VST3 & AU & STANDALONE", 170, 0, 400, 44, juce::Justification::centredLeft);
+    // Content container painted inside its own paint
 }
 
 void CamelPhatAudioProcessorEditor::resized()
 {
-    auto totalArea = getLocalBounds().withTrimmedTop(48).reduced(12);
+    // Scale 900x560 contentContainer to fit current window size preserving aspect ratio
+    const float scale = static_cast<float>(getWidth()) / 900.0f;
+    contentContainer.setTransform(juce::AffineTransform::scale(scale));
 
-    // Layout configuration:
-    // Left Column: Band-Pass Filter (Top), Multi-Mode Filter (Bottom)
-    // Middle Column: Distortion (Top), Flanger & Magic EQ (Middle), Dual X/Y Pads (Bottom)
-    // Right Column: Compressor (Top), Master Section with VU Meter (Bottom)
+    // Internal layout of 900 x 560 canvas
+    auto area = juce::Rectangle<int>(0, 0, 900, 560);
 
-    const int colGap = 10;
-    const int rowGap = 10;
+    // Title bar (height 40)
+    auto titleArea = area.removeFromTop(40).reduced(10, 4);
+    presetSelector.setBounds(titleArea.removeFromRight(200));
 
-    int leftW = 280;
-    int rightW = 220;
-    int midW = totalArea.getWidth() - leftW - rightW - (2 * colGap);
+    // 3 Columns:
+    // Left: 260 px (BP Filter & Distortion)
+    // Center: 300 px (X/Y Pad & LFO 1/2)
+    // Right: 320 px (MM Filter, Flanger, Magic EQ, Compressor, Master)
+    const int gap = 8;
+    auto leftCol   = area.removeFromLeft(260).reduced(4);
+    area.removeFromLeft(gap);
+    auto centerCol = area.removeFromLeft(310).reduced(4);
+    area.removeFromLeft(gap);
+    auto rightCol  = area.reduced(4);
 
-    auto leftCol   = totalArea.removeFromLeft(leftW);
-    totalArea.removeFromLeft(colGap);
-    auto midCol    = totalArea.removeFromLeft(midW);
-    totalArea.removeFromLeft(colGap);
-    auto rightCol  = totalArea;
-
-    // Helper for laying out a rotary slider + label under it
-    auto layoutKnob = [](RotaryControl& ctrl, juce::Rectangle<int> area) {
-        int labelH = 14;
-        auto knobArea = area.reduced(2, 1);
+    auto layoutKnob = [](RotaryControl& ctrl, juce::Rectangle<int> r) {
+        int labelH = 12;
+        auto knobArea = r.reduced(1);
         ctrl.label.setBounds(knobArea.removeFromBottom(labelH));
         ctrl.slider.setBounds(knobArea);
     };
 
-    // -------------------------------------------------------------
-    // LEFT COLUMN: BP Filter (Top: 240px) & MM Filter (Bottom: Rest)
-    // -------------------------------------------------------------
-    auto bpBounds = leftCol.removeFromTop(240);
+    // --- LEFT COLUMN ---
+    // BP Filter Card (Top 260)
+    auto bpBounds = leftCol.removeFromTop(270);
     bpFilterCard.setBounds(bpBounds);
-    bpHelp.setBounds(bpBounds.getRight() - 26, bpBounds.getY() + 5, 18, 18);
-
+    bpHelp.setBounds(bpBounds.getRight() - 24, bpBounds.getY() + 4, 16, 16);
     auto bpInner = bpFilterCard.getContentBounds();
-    // 2 rows of knobs
-    auto bpRow1 = bpInner.removeFromTop(bpInner.getHeight() / 2);
-    auto bpRow2 = bpInner;
 
-    int bpKnobW = bpRow1.getWidth() / 3;
-    layoutKnob(bpCutLow, bpRow1.removeFromLeft(bpKnobW));
-    layoutKnob(bpCutHigh, bpRow1.removeFromLeft(bpKnobW));
-    layoutKnob(bpRes, bpRow1);
+    auto bpTopToggles = bpInner.removeFromTop(22);
+    bpBypassToggle.button.setBounds(bpTopToggles.removeFromLeft(70));
+    bpLinkToggle.button.setBounds(bpTopToggles.removeFromLeft(60));
 
-    int bpKnobW2 = bpRow2.getWidth() / 2;
-    layoutKnob(bpMix, bpRow2.removeFromLeft(bpKnobW2));
-    layoutKnob(bpRejectMix, bpRow2);
+    auto bpSliderArea = bpInner.removeFromTop(130);
+    auto s1 = bpSliderArea.removeFromLeft(bpSliderArea.getWidth() / 2);
+    bpLowCutLabel.setBounds(s1.removeFromBottom(14));
+    bpLowCutSlider.setBounds(s1.reduced(10, 0));
 
-    leftCol.removeFromTop(rowGap);
+    bpHighCutLabel.setBounds(bpSliderArea.removeFromBottom(14));
+    bpHighCutSlider.setBounds(bpSliderArea.reduced(10, 0));
 
-    // MM Filter
-    auto mmBounds = leftCol;
-    mmFilterCard.setBounds(mmBounds);
-    mmHelp.setBounds(mmBounds.getRight() - 26, mmBounds.getY() + 5, 18, 18);
+    auto bpKnobRow = bpInner;
+    int bpKw = bpKnobRow.getWidth() / 3;
+    layoutKnob(bpLowResKnob, bpKnobRow.removeFromLeft(bpKw));
+    layoutKnob(bpHighResKnob, bpKnobRow.removeFromLeft(bpKw));
+    layoutKnob(bpBrMixKnob, bpKnobRow);
 
-    auto mmInner = mmFilterCard.getContentBounds();
-    mmModeBox.setBounds(mmInner.removeFromTop(24).reduced(20, 0));
-    mmInner.removeFromTop(6);
+    leftCol.removeFromTop(gap);
 
-    auto mmRow1 = mmInner.removeFromTop(mmInner.getHeight() / 2);
-    auto mmRow2 = mmInner;
-
-    int mmKnobW = mmRow1.getWidth() / 2;
-    layoutKnob(mmCutoff, mmRow1.removeFromLeft(mmKnobW));
-    layoutKnob(mmRes, mmRow1);
-
-    int mmKnobW3 = mmRow2.getWidth() / 3;
-    layoutKnob(mmEnvAmount, mmRow2.removeFromLeft(mmKnobW3));
-    layoutKnob(mmEnvAttack, mmRow2.removeFromLeft(mmKnobW3));
-    layoutKnob(mmEnvRelease, mmRow2);
-
-    // -------------------------------------------------------------
-    // MIDDLE COLUMN: Distortion (Top), Flanger/Magic EQ (Mid), XY Pads (Bottom)
-    // -------------------------------------------------------------
-    auto distBounds = midCol.removeFromTop(120);
+    // Distortion Card (Bottom)
+    auto distBounds = leftCol;
     distCard.setBounds(distBounds);
-    distHelp.setBounds(distBounds.getRight() - 26, distBounds.getY() + 5, 18, 18);
-
+    distHelp.setBounds(distBounds.getRight() - 24, distBounds.getY() + 4, 16, 16);
     auto distInner = distCard.getContentBounds();
-    int distKnobW = distInner.getWidth() / 5;
-    layoutKnob(distTube, distInner.removeFromLeft(distKnobW));
-    layoutKnob(distMech, distInner.removeFromLeft(distKnobW));
-    layoutKnob(distBit, distInner.removeFromLeft(distKnobW));
-    layoutKnob(distXcita, distInner.removeFromLeft(distKnobW));
-    layoutKnob(distMix, distInner);
+    distBypassToggle.button.setBounds(distInner.removeFromTop(22).removeFromLeft(70));
 
-    midCol.removeFromTop(rowGap);
+    int dKw = distInner.getWidth() / 4;
+    layoutKnob(distMechKnob, distInner.removeFromLeft(dKw));
+    layoutKnob(distTubeKnob, distInner.removeFromLeft(dKw));
+    layoutKnob(distBitKnob, distInner.removeFromLeft(dKw));
+    layoutKnob(distXcitaKnob, distInner);
 
-    // Mid Row: Flanger & Magic EQ side-by-side
-    auto midRowBounds = midCol.removeFromTop(120);
-    auto flangerBounds = midRowBounds.removeFromLeft(midRowBounds.getWidth() * 6 / 10);
-    midRowBounds.removeFromLeft(colGap);
-    auto eqBounds = midRowBounds;
+    // --- CENTER COLUMN ---
+    // X/Y Pad Card (Top 250)
+    centerModCard.setBounds(centerCol);
+    centerModHelp.setBounds(centerCol.getRight() - 24, centerCol.getY() + 4, 16, 16);
+    auto centerInner = centerModCard.getContentBounds();
 
-    // Flanger
-    flangerCard.setBounds(flangerBounds);
-    flangerHelp.setBounds(flangerBounds.getRight() - 26, flangerBounds.getY() + 5, 18, 18);
-    auto flangerInner = flangerCard.getContentBounds();
-    int flangerKnobW = flangerInner.getWidth() / 4;
-    layoutKnob(flangerRate, flangerInner.removeFromLeft(flangerKnobW));
-    layoutKnob(flangerDepth, flangerInner.removeFromLeft(flangerKnobW));
-    layoutKnob(flangerFeedback, flangerInner.removeFromLeft(flangerKnobW));
-    layoutKnob(flangerMix, flangerInner);
+    // XY Pad & Controls
+    auto xyArea = centerInner.removeFromTop(230);
+    xyPad.setBounds(xyArea.removeFromTop(150));
 
-    // Magic EQ
-    magicEqCard.setBounds(eqBounds);
-    eqHelp.setBounds(eqBounds.getRight() - 26, eqBounds.getY() + 5, 18, 18);
-    auto eqInner = magicEqCard.getContentBounds();
-    int eqKnobW = eqInner.getWidth() / 2;
-    layoutKnob(magicFreq, eqInner.removeFromLeft(eqKnobW));
-    layoutKnob(magicAmount, eqInner);
+    auto xyControls = xyArea;
+    auto xyRow1 = xyControls.removeFromTop(38);
+    xyXTargetBox.label.setBounds(xyRow1.removeFromLeft(50));
+    xyXTargetBox.box.setBounds(xyRow1.removeFromLeft(110).reduced(2, 6));
+    layoutKnob(xyXDepthKnob, xyRow1.reduced(2, 0));
 
-    midCol.removeFromTop(rowGap);
+    auto xyRow2 = xyControls;
+    xyYTargetBox.label.setBounds(xyRow2.removeFromLeft(50));
+    xyYTargetBox.box.setBounds(xyRow2.removeFromLeft(110).reduced(2, 6));
+    layoutKnob(xyYDepthKnob, xyRow2.reduced(2, 0));
 
-    // Bottom Row: Dual X/Y Pads
-    auto xyBounds = midCol;
-    int padW = (xyBounds.getWidth() - colGap) / 2;
-    auto pad1Area = xyBounds.removeFromLeft(padW);
-    xyBounds.removeFromLeft(colGap);
-    auto pad2Area = xyBounds;
+    centerInner.removeFromTop(6);
 
-    filterXYPad.setBounds(pad1Area);
-    xyFilterHelp.setBounds(pad1Area.getRight() - 26, pad1Area.getY() + 5, 18, 18);
+    // LFO 1 Panel
+    auto lfo1Area = centerInner.removeFromTop(110);
+    auto lfo1Row1 = lfo1Area.removeFromTop(24);
+    lfo1WaveBox.box.setBounds(lfo1Row1.removeFromLeft(80));
+    lfo1SyncToggle.button.setBounds(lfo1Row1.removeFromLeft(55));
+    lfo1SyncDivBox.box.setBounds(lfo1Row1.removeFromLeft(60));
+    lfo1TargetBox.box.setBounds(lfo1Row1);
 
-    distXYPad.setBounds(pad2Area);
-    xyDistHelp.setBounds(pad2Area.getRight() - 26, pad2Area.getY() + 5, 18, 18);
+    auto lfo1KnobRow = lfo1Area;
+    layoutKnob(lfo1RateKnob, lfo1KnobRow.removeFromLeft(lfo1KnobRow.getWidth() / 2));
+    layoutKnob(lfo1DepthKnob, lfo1KnobRow);
 
-    // -------------------------------------------------------------
-    // RIGHT COLUMN: Compressor (Top: 270px), Master & VU Meter (Bottom)
-    // -------------------------------------------------------------
-    auto compBounds = rightCol.removeFromTop(270);
+    centerInner.removeFromTop(6);
+
+    // LFO 2 Panel
+    auto lfo2Area = centerInner;
+    auto lfo2Row1 = lfo2Area.removeFromTop(24);
+    lfo2WaveBox.box.setBounds(lfo2Row1.removeFromLeft(80));
+    lfo2SyncToggle.button.setBounds(lfo2Row1.removeFromLeft(55));
+    lfo2SyncDivBox.box.setBounds(lfo2Row1.removeFromLeft(60));
+    lfo2TargetBox.box.setBounds(lfo2Row1);
+
+    auto lfo2KnobRow = lfo2Area;
+    layoutKnob(lfo2RateKnob, lfo2KnobRow.removeFromLeft(lfo2KnobRow.getWidth() / 2));
+    layoutKnob(lfo2DepthKnob, lfo2KnobRow);
+
+    // --- RIGHT COLUMN ---
+    // MM Filter (Top 150)
+    auto mmBounds = rightCol.removeFromTop(150);
+    mmFilterCard.setBounds(mmBounds);
+    mmHelp.setBounds(mmBounds.getRight() - 24, mmBounds.getY() + 4, 16, 16);
+    auto mmInner = mmFilterCard.getContentBounds();
+
+    auto mmTop = mmInner.removeFromTop(24);
+    mmBypassToggle.button.setBounds(mmTop.removeFromLeft(65));
+    mmTypeBox.box.setBounds(mmTop.removeFromLeft(130));
+
+    auto mmRow1 = mmInner.removeFromTop(48);
+    int mmKw1 = mmRow1.getWidth() / 4;
+    layoutKnob(mmCutoffKnob, mmRow1.removeFromLeft(mmKw1));
+    layoutKnob(mmResKnob, mmRow1.removeFromLeft(mmKw1));
+    layoutKnob(mmMixKnob, mmRow1.removeFromLeft(mmKw1));
+    layoutKnob(mmEnvDepthKnob, mmRow1);
+
+    auto mmRow2 = mmInner;
+    int mmKw2 = mmRow2.getWidth() / 2;
+    layoutKnob(mmEnvAttKnob, mmRow2.removeFromLeft(mmKw2));
+    layoutKnob(mmEnvRelKnob, mmRow2);
+
+    rightCol.removeFromTop(4);
+
+    // Flanger & Magic EQ Row (Height 90)
+    auto row2Bounds = rightCol.removeFromTop(95);
+    auto flgBounds = row2Bounds.removeFromLeft(row2Bounds.getWidth() / 2 - 2);
+    flangerCard.setBounds(flgBounds);
+    flangerHelp.setBounds(flgBounds.getRight() - 20, flgBounds.getY() + 3, 14, 14);
+    auto flgInner = flangerCard.getContentBounds();
+    flgBypassToggle.button.setBounds(flgInner.removeFromTop(18).removeFromLeft(60));
+    layoutKnob(flgRateKnob, flgInner.removeFromLeft(flgInner.getWidth() / 2));
+    layoutKnob(flgAmountKnob, flgInner);
+
+    auto meqBounds = row2Bounds.removeFromRight(flgBounds.getWidth());
+    magicEqCard.setBounds(meqBounds);
+    eqHelp.setBounds(meqBounds.getRight() - 20, meqBounds.getY() + 3, 14, 14);
+    auto meqInner = magicEqCard.getContentBounds();
+    auto meqTop = meqInner.removeFromTop(18);
+    meqBypassToggle.button.setBounds(meqTop.removeFromLeft(55));
+    meqPhatToggle.button.setBounds(meqTop.removeFromLeft(50));
+    layoutKnob(meqAmountKnob, meqInner.removeFromLeft(meqInner.getWidth() / 2));
+    layoutKnob(meqTuneKnob, meqInner);
+
+    rightCol.removeFromTop(4);
+
+    // Compressor Card (Height 100)
+    auto compBounds = rightCol.removeFromTop(105);
     compCard.setBounds(compBounds);
-    compHelp.setBounds(compBounds.getRight() - 26, compBounds.getY() + 5, 18, 18);
-
+    compHelp.setBounds(compBounds.getRight() - 24, compBounds.getY() + 4, 16, 16);
     auto compInner = compCard.getContentBounds();
-    compPhatToggle.setBounds(compInner.removeFromTop(24).reduced(24, 0));
-    compInner.removeFromTop(4);
+    auto compTop = compInner.removeFromTop(20);
+    compBypassToggle.button.setBounds(compTop.removeFromLeft(65));
+    compPhatToggle.button.setBounds(compTop.removeFromLeft(60));
+    int compKw = compInner.getWidth() / 2;
+    layoutKnob(compAmountKnob, compInner.removeFromLeft(compKw));
+    layoutKnob(compReleaseKnob, compInner);
 
-    auto compRow1 = compInner.removeFromTop(compInner.getHeight() / 2);
-    auto compRow2 = compInner;
+    rightCol.removeFromTop(4);
 
-    int compKnobW1 = compRow1.getWidth() / 3;
-    layoutKnob(compThresh, compRow1.removeFromLeft(compKnobW1));
-    layoutKnob(compRatio, compRow1.removeFromLeft(compKnobW1));
-    layoutKnob(compMix, compRow1);
-
-    int compKnobW2 = compRow2.getWidth() / 2;
-    layoutKnob(compAttack, compRow2.removeFromLeft(compKnobW2));
-    layoutKnob(compRelease, compRow2);
-
-    rightCol.removeFromTop(rowGap);
-
-    // Master Section & VU Meter
+    // Master Card (Remaining height)
     auto masterBounds = rightCol;
     masterCard.setBounds(masterBounds);
-    masterHelp.setBounds(masterBounds.getRight() - 26, masterBounds.getY() + 5, 18, 18);
-
+    masterHelp.setBounds(masterBounds.getRight() - 24, masterBounds.getY() + 4, 16, 16);
     auto masterInner = masterCard.getContentBounds();
-    // Meter on the right
-    auto meterArea = masterInner.removeFromRight(36).reduced(0, 4);
-    vuMeter.setBounds(meterArea);
 
-    masterInner.removeFromRight(10);
-    int masterKnobH = masterInner.getHeight() / 2;
-    layoutKnob(masterMix, masterInner.removeFromTop(masterKnobH));
-    layoutKnob(masterGain, masterInner);
+    auto mTop = masterInner.removeFromTop(22);
+    masterBypassToggle.button.setBounds(mTop.removeFromLeft(65));
+    diceButton.setBounds(mTop.removeFromRight(55).reduced(2, 2));
+
+    auto vuArea = masterInner.removeFromRight(32).reduced(0, 2);
+    vuMeter.setBounds(vuArea);
+
+    int mKw = masterInner.getWidth() / 3;
+    layoutKnob(inputGainKnob, masterInner.removeFromLeft(mKw));
+    layoutKnob(masterMixKnob, masterInner.removeFromLeft(mKw));
+    layoutKnob(masterVolKnob, masterInner);
 }
 
 void CamelPhatAudioProcessorEditor::mouseDown(const juce::MouseEvent&)

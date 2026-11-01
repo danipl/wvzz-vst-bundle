@@ -3,12 +3,26 @@
 #include "IDSPModule.h"
 #include <juce_dsp/juce_dsp.h>
 #include <cmath>
+#include <algorithm>
 
 namespace camelphat::dsp {
 
 /**
- * @brief Optical program-dependent dynamic compressor with analog "Phat" mode saturation.
- * Accurately models the smooth leveling and transient punch of CamelPhat 3's compressor.
+ * @brief Module 6: Compressor (CamelCrusher / Phat Dynamics)
+ *
+ * - One-knob feed-forward compressor with auto-makeup gain and safety soft-clipper.
+ * - Attack:
+ *     Normal: 3.5 ms
+ *     Phat:   0.8 ms
+ * - comp_amount (0.0 to 1.0):
+ *     Simultaneously drives Threshold from 0 dB down to -36 dB
+ *     and applies Auto-Makeup Gain from +0 dB to +14 dB.
+ * - Normal Mode (comp_phat = 0):
+ *     Ratio: 3.5:1, Soft Knee: 6 dB
+ * - Phat Mode (comp_phat = 1):
+ *     Ratio: 12:1, Hard Knee: 1 dB,
+ *     plus post-makeup tanh soft-clip ceiling at -0.1 dBFS.
+ * - comp_release: 10.0 to 1500.0 ms (default 120.0 ms)
  */
 class CompressorModule : public IAudioProcessorModule
 {
@@ -28,20 +42,39 @@ public:
         gainReductionDb = 0.0f;
     }
 
-    void setParameters(float thresholdDb,
-                       float ratioVal,
-                       float attackMs,
+    void setParameters(float amountNorm,
                        float releaseMs,
                        bool phatModeEnabled,
-                       float mixNorm) noexcept
+                       bool bypass = false) noexcept
     {
-        threshold = juce::jlimit(-60.0f, 0.0f, thresholdDb);
-        ratio = juce::jlimit(1.0f, 20.0f, ratioVal);
+        amount = juce::jlimit(0.0f, 1.0f, amountNorm);
+        releaseTimeMs = juce::jlimit(10.0f, 1500.0f, releaseMs);
         phatMode = phatModeEnabled;
-        compMix = juce::jlimit(0.0f, 1.0f, mixNorm);
+        isBypassed = bypass;
 
-        const float safeAttack  = juce::jmax(0.1f, attackMs);
-        const float safeRelease = juce::jmax(1.0f, releaseMs);
+        // One-knob mappings:
+        // Threshold: 0 dB down to -36 dB
+        thresholdDb = -36.0f * amount;
+
+        // Auto-Makeup: 0 dB up to +14 dB
+        autoMakeupDb = 14.0f * amount;
+
+        // Ballistics and curve parameters based on mode:
+        if (phatMode)
+        {
+            attackMs = 0.8f;
+            ratio = 12.0f;
+            kneeWidthDb = 1.0f;
+        }
+        else
+        {
+            attackMs = 3.5f;
+            ratio = 3.5f;
+            kneeWidthDb = 6.0f;
+        }
+
+        const float safeAttack = juce::jmax(0.05f, attackMs);
+        const float safeRelease = juce::jmax(1.0f, releaseTimeMs);
 
         attackCoeff  = std::exp(-1.0f / (static_cast<float>(sampleRate) * safeAttack * 0.001f));
         releaseCoeff = std::exp(-1.0f / (static_cast<float>(sampleRate) * safeRelease * 0.001f));
@@ -52,79 +85,85 @@ public:
         const int numSamples = buffer.getNumSamples();
         const int numChannels = juce::jmin(2, buffer.getNumChannels());
 
-        if (numSamples == 0 || numChannels == 0)
+        if (numSamples == 0 || numChannels == 0 || isBypassed || amount <= 0.001f)
             return;
 
         float* channelLeft  = buffer.getWritePointer(0);
         float* channelRight = numChannels > 1 ? buffer.getWritePointer(1) : nullptr;
 
+        const float autoMakeupLinear = juce::Decibels::decibelsToGain(autoMakeupDb);
+        const float halfKnee = kneeWidthDb * 0.5f;
         const float slope = 1.0f - (1.0f / ratio);
+
+        // Ceiling threshold in linear for -0.1 dBFS
+        constexpr float ceilingLinear = 0.988553f; // -0.1 dBFS
+        const float invCeiling = 1.0f / ceilingLinear;
 
         for (int i = 0; i < numSamples; ++i)
         {
             const float inL = channelLeft[i];
-            const float inR = channelRight != nullptr ? channelRight[i] : inL;
+            const float inR = (channelRight != nullptr) ? channelRight[i] : inL;
 
-            // Stereo link: detect max absolute amplitude
+            // Stereo link: peak detector
             const float detectorIn = juce::jmax(std::abs(inL), std::abs(inR));
 
-            // Envelope detection with optical ballistics
+            // Envelope detection
             if (detectorIn > envelope)
                 envelope = detectorIn + attackCoeff * (envelope - detectorIn);
             else
                 envelope = detectorIn + releaseCoeff * (envelope - detectorIn);
 
-            // Compute gain reduction in dB
             const float envDb = juce::Decibels::gainToDecibels(std::max(envelope, 1.0e-5f));
-            float targetGrDb = 0.0f;
 
-            if (envDb > threshold)
+            // Soft-knee feedforward compression curve
+            float grDb = 0.0f;
+            if (envDb > thresholdDb + halfKnee)
             {
-                const float overshoot = envDb - threshold;
-                targetGrDb = -overshoot * slope;
+                grDb = -slope * (envDb - thresholdDb);
+            }
+            else if (envDb > thresholdDb - halfKnee)
+            {
+                const float diff = envDb - thresholdDb + halfKnee;
+                grDb = -slope * (diff * diff) / (2.0f * kneeWidthDb);
             }
 
-            gainReductionDb = targetGrDb;
-            const float linearGain = juce::Decibels::decibelsToGain(gainReductionDb);
+            gainReductionDb = grDb;
+            const float compGain = juce::Decibels::decibelsToGain(grDb) * autoMakeupLinear;
 
-            // Apply compression gain
-            float compressedL = inL * linearGain;
-            float compressedR = inR * linearGain;
+            float outL = inL * compGain;
+            float outR = inR * compGain;
 
-            // "Phat" Mode: Tube/transformer analog saturation with harmonic density
+            // Phat mode post-makeup tanh soft-clip ceiling at -0.1 dBFS
             if (phatMode)
             {
-                compressedL = applyPhatSaturation(compressedL);
-                compressedR = applyPhatSaturation(compressedR);
+                outL = std::tanh(outL * invCeiling) * ceilingLinear;
+                outR = std::tanh(outR * invCeiling) * ceilingLinear;
             }
 
-            // Blend Wet and Dry
-            channelLeft[i] = (1.0f - compMix) * inL + compMix * compressedL;
+            channelLeft[i] = outL;
             if (channelRight != nullptr)
-                channelRight[i] = (1.0f - compMix) * inR + compMix * compressedR;
+                channelRight[i] = outR;
         }
     }
 
     [[nodiscard]] float getGainReductionDb() const noexcept { return gainReductionDb; }
 
 private:
-    [[nodiscard]] inline float applyPhatSaturation(float x) const noexcept
-    {
-        // 1.5x drive with gentle soft-knee saturation
-        const float driven = x * 1.4f;
-        return std::tanh(driven) * 0.9f;
-    }
-
     double sampleRate { 44100.0 };
 
-    float threshold { 0.0f };
-    float ratio { 2.0f };
-    float compMix { 1.0f };
-    bool phatMode { false };
+    float amount { 0.0f };
+    float releaseTimeMs { 120.0f };
+    bool  phatMode { false };
+    bool  isBypassed { false };
 
-    float attackCoeff  { 0.0f };
+    float thresholdDb { 0.0f };
+    float autoMakeupDb { 0.0f };
+    float attackMs { 3.5f };
+    float ratio { 3.5f };
+    float kneeWidthDb { 6.0f };
+
+    float attackCoeff { 0.0f };
     float releaseCoeff { 0.0f };
-
     float envelope { 0.0f };
     float gainReductionDb { 0.0f };
 };

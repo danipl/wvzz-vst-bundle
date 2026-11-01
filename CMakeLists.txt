@@ -48,6 +48,8 @@ target_sources(CamelPhat
         Source/DSP/MagicEQ.h
         Source/DSP/CompressorModule.h
         Source/DSP/MasterSection.h
+        Source/DSP/ModulationEngine.h
+        Source/Presets/FactoryPresets.h
         Source/UI/CamelPhatLookAndFeel.cpp
         Source/UI/CamelPhatLookAndFeel.h
         Source/UI/XYPadComponent.cpp

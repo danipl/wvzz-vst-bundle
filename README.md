@@ -1,26 +1,29 @@
-# CamelPhat (JUCE 8 / C++20)
+# CamelPhat 3 (JUCE 8 / C++20)
 
-> A high-performance, zero-allocation multi-effect sound-shaping plugin recreating the legendary Camel Audio CamelPhat 3 for modern 64-bit DAWs.
+> A high-performance, zero-allocation multi-effect sound-shaping plugin faithfully recreating the signal chain, DSP behavior, and modulation architecture of **Camel Audio CamelPhat 3** for modern 64-bit DAWs.
 
-Available for **macOS** (Universal Binary `arm64` & `x86_64`) as **VST3**, **Audio Unit (AU)**, and **Standalone** application.
+Available for **macOS** (Universal Binary `arm64` & `x86_64`) as **VST3**, **Audio Unit (AU v2)**, and **Standalone** application.
 
 ---
 
 ## Highlights
 
-- **Zero-Allocation Audio Thread:** Strictly 0 heap allocations (`malloc`/`new`) inside `processBlock()`, verified under unit tests across 1,000 continuous audio blocks.
-- **4x Oversampling Engine:** Polyphase minimum-phase IIR oversampling running at zero latency to eliminate distortion aliasing while keeping phase alignment with the dry signal.
+- **Zero-Allocation Audio Thread:** Strictly 0 heap allocations (`malloc`/`new`) inside `processBlock()`, verified under headless unit tests across continuous audio rendering blocks.
+- **4x Oversampling Engine:** 4x polyphase IIR oversampling with latency compensation on the global dry signal path to eliminate digital aliasing while maintaining phase alignment.
 - **7 Core DSP Stages:**
-  - **Band-Pass Crossover & Splitter:** Isolates drive frequencies while preserving untouched clean low-end and high-end air.
-  - **Distortion Suite:** Tube (warm saturation), Mech (hard clip), Bit Crusher, and Xcita (dynamic exciter).
-  - **Multi-Mode Filter:** 12dB/24dB Low-Pass, Band-Pass, and High-Pass with envelope follower modulation.
-  - **Stereo Flanger:** Analog comb-filtering modulation with bipolar feedback.
-  - **Magic EQ:** Specialized low-end sub bass peaking enhancer.
-  - **Compressor:** Flexible dynamics with analog optical **Phat Mode**.
-  - **Master Section:** Stereo dry/wet blend, gain trim, and 60 FPS animated VU meters.
-- **Modern Vector UI & LookAndFeel:** High-DPI dark cyberpunk aesthetic with neon arc dials and dual interactive 2D X/Y vector pads (`Filter X/Y` and `Drive X/Y`).
+  - **BP Filter (Bandpass & Band-Reject Split):** Andy Simper Cytomic ZDF State Variable Filters with Low/High cut link and band-reject extraction.
+  - **4-Stage Parallel Distortion:** Mech (1.2 kHz pre-emphasis with sine wavefolding), Tube (analog saturation with DC blocker), Bitcrusher (base sample rate decimation), and Xcita (2.8 kHz HPF with full-wave rectification).
+  - **12-Mode Multi-Mode Filter:** 12 filter topologies (`LP 12/24dB`, `BP 12/24dB`, `HP 12/24dB`, `Notch`, `Peak`, `Comb +`, `Comb -`, `RingMod`, and `Vowel / Formant` morphing across `A-E-I-O-U`) with pre-BP envelope follower modulation.
+  - **Stereo Flanger:** 3rd-order Lagrange fractional delay interpolation with 90° quadrature stereo LFO and fixed 0.55 feedback.
+  - **Magic EQ:** Resonant sub-bass peaking booster (60-120 Hz) with complimentary anti-mud dip at 2 * tune, and Phat Mode with internal resonant saturation.
+  - **One-Knob Compressor:** Auto-makeup gain and dual ballistics (Normal 3.5:1 leveling vs Phat 12:1 smash with -0.1 dBFS ceiling).
+  - **Master Section:** Dry latency compensation, output volume trim (-36 to +12 dB), Dice smart randomizer, and 60 FPS animated VU meters.
+- **Modulation System:**
+  - **LFO 1 & LFO 2:** Control-rate modulation with 7 waveforms (Sine, Triangle, Saw Down, Saw Up, Square, S&H, Smooth Random), Free and Host Tempo Sync.
+  - **21-Target Matrix:** Cross-modulation of LFO 2 Rate by LFO 1, BP Both Cuts, and individual module parameters.
+  - **Macro X/Y Pad:** 2D interactive vector surface with assignable targets and depth controls.
+- **10 Factory Presets:** Included built-in presets covering classic bass mangling, breakbeat smashing, and lo-fi textures.
 - **Contextual Help System:** In-plugin plain-language explanation cards accessible via **`?`** buttons on every module.
-- **SOLID Architecture:** Modular, interface-segregated C++20 code adhering strictly to SOLID design principles (`IDSPModule`, `IMeterSource`, `IHelpContentProvider`, `IHelpOverlayHost`).
 
 ---
 
@@ -48,56 +51,6 @@ make install-system
 
 # Run tests:
 make test
-```
-
-### Manual CMake Commands
-If you prefer running CMake directly:
-```bash
-# Configure with CMake and Ninja
-cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-
-# Build the .vst3 bundle directly:
-cmake --build build --target CamelPhat_VST3
-
-# Build all formats (VST3, AU, App, Tests):
-cmake --build build
-
-# Copy .vst3 bundle to user audio plug-ins folder:
-mkdir -p ~/Library/Audio/Plug-Ins/VST3
-cp -R build/CamelPhat_artefacts/VST3/CamelPhat.vst3 ~/Library/Audio/Plug-Ins/VST3/
-```
-
----
-
-## Project Structure
-
-```
-├── CMakeLists.txt              # CMake build definitions (JUCE 8.0.4 FetchContent)
-├── MANUAL.md                   # Full compilation, installation, & user guide
-├── Source/
-│   ├── PluginProcessor.h/.cpp  # JUCE AudioProcessor & real-time audio pipeline
-│   ├── PluginEditor.h/.cpp     # Custom AudioProcessorEditor & layout assembly
-│   ├── Parameters.h            # APVTS parameter IDs & layout definitions
-│   ├── DSP/                    # Decoupled zero-allocation DSP modules
-│   │   ├── IDSPModule.h        # Module contracts & IMeterSource interface
-│   │   ├── BPFilter.h          # Crossover band-pass / band-reject splitter
-│   │   ├── DistortionModule.h  # Tube, Mech, Bit, and Exciter saturators
-│   │   ├── MMFilter.h          # State Variable Filter + Envelope Follower
-│   │   ├── FlangerModule.h     # Stereo delay line flanger
-│   │   ├── MagicEQ.h           # Peaking sub-bass biquad filter
-│   │   ├── CompressorModule.h  # VCA compressor with Phat optical mode
-│   │   └── MasterSection.h     # Dry/wet mixer, gain, and atomic peak/RMS levels
-│   └── UI/                     # Custom vector interface components
-│       ├── CamelPhatLookAndFeel # Vector rotary dials, toggles, and combo boxes
-│       ├── ModuleCardComponent # Delineated card containers
-│       ├── XYPadComponent      # 2D coordinate crosshairs with puck dragging
-│       ├── StereoVUMeterComponent # 60 FPS timer-driven stereo level meter
-│       ├── IHelpSystem.h       # Contracts for help provider & overlay host
-│       ├── HelpContentRepository # Plain-English explanation repository
-│       ├── HelpButtonComponent # Interactive "?" vector button
-│       └── HelpOverlayComponent # Floating contextual explanation card
-└── Tests/
-    └── DSPTests.cpp            # Headless quantitative test suite
 ```
 
 ---

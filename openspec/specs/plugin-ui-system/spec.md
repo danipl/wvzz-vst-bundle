@@ -13,18 +13,21 @@ The UI system SHALL render custom vector rotary knobs featuring dynamic arc prog
 - **THEN** the knob arc fills smoothly and updates the underlying APVTS parameter value in real time
 
 ### Requirement: Modular Section Grouping
-The plugin editor SHALL organize the signal chain into clearly delineated visual cards representing BP Filter, Distortion, MM Filter, Flanger, Magic EQ, Compressor, and Master sections.
+The plugin editor SHALL organize the interface into the 3-column CamelPhat 3 layout:
+- **Left Column**: BP Filter (vertical dual sliders for Low/High Cut with visual passband shading, Link toggle, Low/High Res knobs, BR Mix knob, bypass) stacked above Distortion (4 large rotary knobs for Mech, Tube, Bitcrusher, Xcita, bypass).
+- **Center Column**: Single interactive X/Y Pad at the top with X/Y target selector dropdowns and depth controls; LFO 1 and LFO 2 panels directly below with live waveform visualizers, rate/sync controls, depth, and target dropdowns.
+- **Right Column**: MM Filter section (12-item Filter Type dropdown, Cutoff, Res, Mix, Envelope Attack/Release/Mod, bypass) stacked above Flanger, Magic EQ (with glowing `P` toggle), Compressor (with glowing `P` toggle and gain reduction LED meter), and Master Section (Mix, Volume, Analog-style VU/Peak Output Meter, Dice button, bypass).
 
 #### Scenario: Visual layout hierarchy
 - **WHEN** the plugin window opens in any host DAW
-- **THEN** controls for each DSP stage are grouped into distinct, titled module panels with clear hierarchy
+- **THEN** all modules appear in their designated Left, Center, or Right column positions with individual bypass toggles and `?` help triggers
 
 ### Requirement: Interactive Dual X/Y Vector Pads
-The system SHALL provide two interactive 2D coordinate pads that control paired parameters simultaneously with visual crosshairs and draggable pucks.
+The system SHALL provide a central interactive 2D X/Y Controller Pad (`xy_x`, `xy_y`) with target selector dropdowns and bipolar depth controls (`xy_x_depth`, `xy_y_depth`) that modulate any target from the 21-item Modulatable Targets Enum.
 
 #### Scenario: X/Y pad dragging
-- **WHEN** user drags the puck inside the Filter X/Y pad or Distortion X/Y pad
-- **THEN** both horizontal and vertical target parameters update simultaneously with immediate audible effect
+- **WHEN** the user selects targets for the X and Y axes and drags the puck inside the central X/Y Pad
+- **THEN** `xy_x` and `xy_y` update in real time and apply their configured depth offsets to the selected target parameters
 
 ### Requirement: Responsive 60 FPS Stereo VU Metering
 The UI system SHALL provide smooth, hardware-accelerated stereo peak and RMS level meters driven by a UI timer reading atomic levels from the DSP master stage.
@@ -39,3 +42,17 @@ All graphical controls SHALL maintain bidirectional synchronization with host DA
 #### Scenario: Host automation movement
 - **WHEN** a DAW automation lane modulates a parameter
 - **THEN** the corresponding GUI knob, slider, or toggle updates its displayed position synchronously without fighting the host
+
+### Requirement: Fixed-Aspect-Ratio Resizable Window
+The plugin editor SHALL open at a default resolution of `900 x 560 px` and support fixed-aspect-ratio window resizing from `75%` (`675 x 420 px`) to `200%` (`1800 x 1120 px`).
+
+#### Scenario: User resizes plugin editor window
+- **WHEN** the user drags the window resize corner in a host DAW
+- **THEN** the editor scales smoothly while preserving the `900:560` aspect ratio within the `75%` to `200%` bounds
+
+### Requirement: Live LFO Waveform Visualizers and Gain Reduction Meter
+The UI system SHALL render live waveform visualizers in the LFO 1 and LFO 2 panels, a vertical passband shading indicator between the BP Filter dual vertical cutoff sliders, glowing `P` toggles for Magic EQ and Compressor Phat modes, a Compressor gain-reduction LED meter, and a Master `Dice` randomizer button.
+
+#### Scenario: Visual feedback during modulation and compression
+- **WHEN** audio is compressed and LFO 1/2 are running
+- **THEN** the LFO panels animate the active oscillator waveform and phase while the Compressor LED meter displays real-time gain reduction in dB

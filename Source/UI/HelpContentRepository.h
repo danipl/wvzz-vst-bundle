@@ -25,12 +25,11 @@ public:
         if (it != topics.end())
             return it->second;
 
-        // Fallback topic
         return {
             "Module Information",
             "Contextual guidance for this component is currently active.",
             "Signal Processing Path",
-            { "Use the rotary knobs to adjust parameter amounts smoothly." }
+            { "Use the rotary knobs and toggles to adjust parameters." }
         };
     }
 
@@ -38,107 +37,108 @@ private:
     void initTopics()
     {
         topics["bp_filter"] = {
-            "BP Filter & Band-Reject Splitter",
-            "Splits the incoming audio into two separate paths: an active passband sent to the distortion and effects chain, and an untouched clean band-reject path for out-of-band audio.",
-            "Stage 1: Input Splitter (Pre-Distortion)",
+            "BP Filter (Bandpass + Band-Reject Split)",
+            "Splits the incoming audio into a passband (sent to Distortion and MM Filter) and a rejected band (summed back in post-MM Filter via BR Mix) using dual 12 dB/oct ZDF SVFs.",
+            "Stage 1: Band Isolation & Rejection",
             {
-                "Low Cut: Removes low rumble from entering the distortion stage (20 Hz - 20 kHz).",
-                "High Cut: Removes harsh high frequencies before distortion (20 Hz - 20 kHz).",
-                "BP Resonance: Boosts the crossover cutoff edges for resonant analog character.",
-                "BP Mix: Blends between raw input and filtered passband audio.",
-                "Band-Reject Mix: Injects the clean, un-distorted sub-bass and treble back into the wet signal downstream."
+                "Low Cut: High-pass cutoff frequency (20 Hz - 20 kHz).",
+                "High Cut: Low-pass cutoff frequency (20 Hz - 20 kHz).",
+                "Link: Locks log-frequency delta between Low and High Cut.",
+                "Low/High Res: Independent resonance at the cutoff points (Q: 0.707 to 12.0).",
+                "BR Mix: Blends clean rejected frequencies back post-MM Filter.",
+                "Bypass: Completely bypasses the filter and split."
             }
         };
 
         topics["distortion"] = {
-            "4-Stage Oversampled Distortion",
-            "Four distinct analog and digital distortion circuits operating in 4x minimum-phase polyphase IIR oversampling with a 10 Hz DC blocking filter.",
-            "Stage 2: Non-Linear Saturation (Passband Audio)",
+            "Distortion (4 Parallel Circuits + 4x Oversampling)",
+            "Four characterful saturation circuits with 4x polyphase IIR oversampling and 10 Hz DC blocking.",
+            "Stage 2: Parallel Waveshaping",
             {
-                "Tube: Smooth, warm analog overdrive with rich even-order harmonics.",
-                "Mech: Aggressive, industrial hard clipping with biting metallic edge.",
-                "Bit Crusher: Digital sample-rate decimation and bit-depth quantization for gritty lo-fi grit.",
-                "Xcita: Dynamic high-frequency harmonic exciter that injects air and presence above 3 kHz.",
-                "Dist Mix: Blends all four parallel distortion stages with the undistorted passband."
+                "Mech: Aggressive mechanical grit with 1.2 kHz pre-emphasis and asymmetric sine wavefolding.",
+                "Tube: Smooth analog-style even/odd harmonic saturation (exp drive 1 to 15).",
+                "Bitcrusher: Quantization (16 to 4 bit) and sample-and-hold (1x to 32x) at base rate.",
+                "Xcita: High-frequency harmonic exciter with full-wave rectification above 2.8 kHz."
             }
         };
 
         topics["mm_filter"] = {
-            "Multi-Mode Filter & Envelope Follower",
-            "State-Variable Filter (SVF) offering Lowpass, Bandpass, and Highpass curves, dynamically modulated by incoming audio transients.",
-            "Stage 3: Resonant Shaping & Dynamic Sweeps",
+            "MM Filter (Multi-Mode Filter + Envelope Follower)",
+            "12 distinct filter topologies with envelope follower modulation tapped from the pre-BP input.",
+            "Stage 3: Multi-Mode Tone Shaping",
             {
-                "Cutoff: Base frequency of the filter (20 Hz - 20 kHz).",
-                "Resonance: Resonance sharpness at the cutoff point (0% - 100%).",
-                "Mode: Selects between Lowpass, Bandpass, or Highpass response.",
-                "Env Amount: Sweeps the cutoff dynamically up or down based on audio peak levels.",
-                "Env Attack & Release: Calibrates how fast the envelope follower reacts to transients."
+                "Filter Type: Selects between 12 modes (LP/BP/HP 12/24dB, Notch, Peak, Comb +/-, RingMod, Vowel).",
+                "Cutoff & Res: Primary frequency and feedback controls up to self-oscillation.",
+                "Mix: Wet/dry blend of the MM Filter output.",
+                "Env Attack/Release: Ballistics for envelope follower tracking.",
+                "Env Mod: Bipolar modulation depth on cutoff (+/- 6 octaves)."
             }
         };
 
         topics["flanger"] = {
-            "Stereo Modulated Flanger",
-            "Short modulated stereo delay lines driven by a quadrature 90-degree LFO with soft-saturating feedback.",
-            "Stage 4: Stereo Spatialization & Comb Filtering",
+            "Flanger (Stereo Modulated)",
+            "Stereo modulated delay line with 3rd-order Lagrange interpolation, 90-degree quadrature LFO, and 0.55 fixed feedback.",
+            "Stage 4: Stereo Phasing & Comb Filtering",
             {
-                "Rate: Controls LFO sweep speed (0.01 Hz to 10 Hz).",
-                "Depth: Controls delay sweep amplitude across the stereo channels.",
-                "Feedback: Deepens the comb-filter resonance (soft-clamped with tanh to prevent runaway feedback).",
-                "Flanger Mix: Blends the flanged signal with the filtered audio."
+                "Rate: LFO sweep speed (0.01 to 20.0 Hz, default 0.4 Hz).",
+                "Amount: Wet/dry mix of the flanged signal.",
+                "Bypass: Completely bypasses the flanger delay line."
             }
         };
 
         topics["magic_eq"] = {
-            "Magic EQ Sub-Bass Booster",
-            "A specialized resonant low-frequency peaking filter with non-linear saturation designed to fatten kick drums and 808 basslines.",
-            "Stage 5: Low-End Harmonic Reinforcement",
+            "Magic EQ (Resonant Low-End Enhancer)",
+            "Pultec-style resonant bass enhancer with complimentary anti-mud dip at 2 * tune.",
+            "Stage 5: Low-End Enhancement",
             {
-                "Frequency: Centers the resonant sub boost between 30 Hz and 120 Hz (default 60 Hz).",
-                "Amount: Adds up to +12 dB of resonant bass lift while gently compressing peaks with warm analog saturation."
+                "Amount: Intensity of low-end resonant boost (0 to +12 dB).",
+                "Tune: Center frequency of the sub/bass enhancement (60 to 120 Hz).",
+                "Phat Mode (P): Places tanh clipper inside resonant state and adds +3 dB air shelf at 8 kHz."
             }
         };
 
         topics["compressor"] = {
-            "Optical Compressor & Phat Mode",
-            "Program-dependent dynamic compressor modeled after vintage optocoupler leveling amplifiers.",
-            "Stage 6: Dynamics Glue & Punch",
+            "Compressor (CamelCrusher / Phat Dynamics)",
+            "Characterful one-knob feed-forward compressor with auto-makeup gain and output safety soft-clipper.",
+            "Stage 6: Dynamics & Slam",
             {
-                "Threshold: Determines the volume level at which compression begins (-60 dB to 0 dB).",
-                "Ratio: Sets dynamic attenuation slope from gentle 1:1 up to heavy 20:1.",
-                "Attack & Release: Shapes transient punch with program-dependent release timing.",
-                "Phat Mode: Engages analog transformer/tube drive in the gain stage for dense low-mid body.",
-                "Comp Mix: Allows parallel 'New York style' compression."
+                "Amount: Simultaneously drives threshold (0 to -36 dB) and auto-makeup (0 to +14 dB).",
+                "Release: Recovery speed (10 to 1500 ms).",
+                "Phat Mode (P): Switches from 3.5:1 leveling to 12:1 smash with -0.1 dBFS tanh ceiling."
             }
         };
 
         topics["master"] = {
-            "Master Section & VU Meter",
-            "Final output stage controlling dry/wet balance against the original input audio, master output volume, and peak/RMS metering.",
-            "Stage 7: Output Mixing & Driver Safety",
+            "Master Section & Utility",
+            "Latency-compensated dry/wet parallel blend, output volume trim, Dice randomizer, and peak/RMS VU metering.",
+            "Stage 7: Output Level & Balance",
             {
-                "Master Mix: Crossfades between 100% dry pre-effect audio and 100% wet multi-effect audio.",
-                "Output Gain: Provides -24 dB to +24 dB of clean output level makeup.",
-                "VU Meters: High-speed 60 FPS animation reading atomic Peak and RMS levels with safety clamping."
+                "Input Gain: Input trim (-24 to +24 dB).",
+                "Master Mix: Global dry/wet parallel blend with oversampling latency compensation.",
+                "Master Vol: Output volume trim (-36 to +12 dB).",
+                "Dice: Smart musical randomizer avoiding runaway resonances."
             }
         };
 
-        topics["xy_filter"] = {
-            "Filter X/Y Modulation Pad",
-            "Interactive 2D control pad for dynamic multi-mode filter sweeps in live performance or tracking.",
-            "Interactive Gesture Control",
+        topics["xy_pad"] = {
+            "X/Y Controller Pad",
+            "2D macro surface applying additive bipolar or unipolar offsets to any parameters from the 21-item Modulatable Targets Enum.",
+            "Macro Gesture Surface",
             {
-                "Horizontal Axis (X): Controls Filter Cutoff frequency (Left = 20 Hz, Right = 20 kHz).",
-                "Vertical Axis (Y): Controls Filter Resonance (Bottom = 0%, Top = 100%)."
+                "X & Y Axes: Horizontal and vertical macro offsets (0.0 to 1.0).",
+                "Target Selectors: Assign any target from the modulation routing matrix.",
+                "Depth Knobs: Configures bipolar modulation depth (-1.0 to +1.0)."
             }
         };
 
-        topics["xy_dist"] = {
-            "Distortion X/Y Blend Pad",
-            "Interactive 2D control pad balancing warm analog drive against industrial metallic bite.",
-            "Interactive Gesture Control",
+        topics["lfo"] = {
+            "LFO 1 & LFO 2 Modulation Panels",
+            "Two independent modulation oscillators computed at control rate with 7 waveforms and Free / Tempo Sync modes.",
+            "Modulation Oscillators",
             {
-                "Horizontal Axis (X): Controls Tube overdrive amount (0% to 100%).",
-                "Vertical Axis (Y): Controls Mech harsh clipping amount (0% to 100%)."
+                "Waveforms: Sine, Triangle, Saw Down, Saw Up, Square, Sample & Hold, Smooth Random.",
+                "Tempo Sync: Free (0.02 to 30 Hz) or Host Sync (4/1 to 1/32, Dotted & Triplet).",
+                "Target & Depth: Modulates any parameter in the 21-target matrix (including LFO 2 Rate from LFO 1)."
             }
         };
     }
