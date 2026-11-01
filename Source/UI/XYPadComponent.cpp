@@ -20,10 +20,9 @@ XYPadComponent::XYPadComponent(juce::AudioProcessorValueTreeState& state,
     paramX = apvts.getParameter(xId);
     paramY = apvts.getParameter(yId);
 
-    if (paramX != nullptr)
-        currentNormX.store(paramX->getValue(), std::memory_order_relaxed);
-    if (paramY != nullptr)
-        currentNormY.store(paramY->getValue(), std::memory_order_relaxed);
+    // Start puck at the center of the X/Y axes (0.5, 0.5) by default
+    currentNormX.store(0.5f, std::memory_order_relaxed);
+    currentNormY.store(0.5f, std::memory_order_relaxed);
 
     apvts.addParameterListener(xId, this);
     apvts.addParameterListener(yId, this);
@@ -60,7 +59,7 @@ void XYPadComponent::updateFromMouse(const juce::MouseEvent& e)
         return;
 
     const float normX = juce::jlimit(0.0f, 1.0f, (e.position.x - padArea.getX()) / padArea.getWidth());
-    const float normY = juce::jlimit(0.0f, 1.0f, (e.position.y - padArea.getY()) / padArea.getHeight());
+    const float normY = juce::jlimit(0.0f, 1.0f, 1.0f - (e.position.y - padArea.getY()) / padArea.getHeight());
 
     currentNormX.store(normX, std::memory_order_relaxed);
     currentNormY.store(normY, std::memory_order_relaxed);
@@ -95,7 +94,7 @@ juce::Point<float> XYPadComponent::getPuckScreenPosition() const noexcept
 {
     auto padArea = getLocalBounds().toFloat().reduced(4.0f);
     const float px = padArea.getX() + currentNormX.load(std::memory_order_relaxed) * padArea.getWidth();
-    const float py = padArea.getY() + currentNormY.load(std::memory_order_relaxed) * padArea.getHeight();
+    const float py = padArea.getY() + (1.0f - currentNormY.load(std::memory_order_relaxed)) * padArea.getHeight();
     return { px, py };
 }
 
@@ -138,7 +137,7 @@ void XYPadComponent::paint(juce::Graphics& g)
     // 5. Title & Axis Labels
     g.setColour(CamelPhatLookAndFeel::textPrimary.withAlpha(0.85f));
     g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
-    g.drawText(padTitle, bounds.reduced(6.0f), juce::Justification::topRight, false);
+    g.drawText(padTitle, bounds.reduced(6.0f), juce::Justification::topLeft, false);
 
     g.setColour(CamelPhatLookAndFeel::textSecondary.withAlpha(0.7f));
     g.setFont(juce::FontOptions(9.5f, juce::Font::plain));
