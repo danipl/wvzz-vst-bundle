@@ -20,7 +20,7 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(JUCE)
 
 juce_add_plugin(CamelPhat
-    COMPANY_NAME "CamelClone"
+    COMPANY_NAME "WvZ"
     IS_SYNTH FALSE
     NEEDS_MIDI_INPUT TRUE
     NEEDS_MIDI_OUTPUT FALSE

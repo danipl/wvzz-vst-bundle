@@ -128,8 +128,8 @@ auval -v aumf Cph3 CamA
    - **Use VST3 Plug-In System Folders** is **On**.
 4. Click **Rescan Plug-Ins** (hold `Alt/Option` while clicking for a full deep scan).
 5. In Ableton's left sidebar, navigate to:
-   - **Plug-ins** > **Audio Units** > **CamelClone** > **CamelPhat**, or
-   - **Plug-ins** > **VST3** > **CamelClone** > **CamelPhat**.
+   - **Plug-ins** > **Audio Units** > **WvZ** > **CamelPhat**, or
+   - **Plug-ins** > **VST3** > **WvZ** > **CamelPhat**.
 6. Drag and drop **CamelPhat** onto any Audio track, Drum rack return, or Master channel.
 
 ---
