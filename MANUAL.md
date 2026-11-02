@@ -15,6 +15,15 @@ A practical guide to compiling, installing, and using WvZz Distortion in your DA
 
 ---
 
+## User Guides & Plugin Documentation
+
+For dedicated plugin manuals and parameter references:
+- **WvZz Distortion**:
+  - [Plugin Architectural Description](Plugins/WvZzDistortion/README.md)
+  - [Producer User Manual](Plugins/WvZzDistortion/USER_MANUAL.md)
+
+---
+
 ## 1. System Requirements
 
 - **Operating System:** macOS 11.0 (Big Sur) or newer.

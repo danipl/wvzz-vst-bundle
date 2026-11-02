@@ -13,15 +13,15 @@ The UI system SHALL render custom vector rotary knobs featuring dynamic arc prog
 - **THEN** the knob arc fills smoothly (from minimum for unipolar parameters or from 12 o'clock center for bipolar parameters) and updates the underlying APVTS parameter value and readout in real time
 
 ### Requirement: Modular Section Grouping
-The plugin editor SHALL organize the interface into a top header bar and the 3-column CamelPhat 3 layout with header-integrated module bypass controls:
-- **Top Header Bar**: Plugin brand title, signal-flow chain summary (`BP → DIST → MM + BR → FLG → EQ → COMP → MASTER`), factory preset selector with previous/next navigation buttons, `Dice` randomizer button, and global `Master Bypass` toggle.
-- **Left Column**: BP Filter (vertical dual sliders for Low/High Cut with visual passband shading, compact `LINK` pill toggle, Low/High Res knobs, BR Mix knob, header bypass button) stacked above Distortion (4 large rotary knobs for Mech, Tube, Bitcrusher, Xcita, header bypass button).
-- **Center Column**: Dual-mode header tab switching between the interactive X/Y Pad and the Signal Comparison Visualizer; distinct bordered LFO 1 and LFO 2 sub-panels directly below with live waveform visualizers, rate/sync controls that automatically switch between `Rate (Hz)` and `Sync Div`, bipolar depth knobs, and target dropdowns.
-- **Right Column**: MM Filter section (12-item Filter Type dropdown, Cutoff, Res, Mix, Envelope Attack/Release/Mod, header bypass button) stacked above Flanger, Magic EQ (with glowing `PHAT` pill toggle), Compressor (with glowing `PHAT` pill toggle and real-time gain reduction dB meter), and Master Section (In Gain, Dry/Wet Mix, Out Volume, and dual Stereo VU/Peak Input and Output Meters).
+The plugin editor SHALL compose the interface from self-contained `IModuleView` components organized into a top header bar and the 3-column layout:
+- **Top Header Bar**: Scalable vector `WvZzLogoComponent`, signal-flow chain indicator (`BP → DIST → MM + BR → FLG → EQ → COMP → MASTER`), factory preset selector with previous/next navigation buttons, `Dice` randomizer button, and global `Master Bypass` toggle.
+- **Left Column**: BP Filter module view stacked above Distortion module view.
+- **Center Column**: Dual-mode header tab switching between the interactive X/Y Pad and the Signal Comparison Visualizer; distinct bordered LFO 1 and LFO 2 sub-panel views.
+- **Right Column**: MM Filter module view stacked above Flanger, Magic EQ, Compressor (with real-time GR meter), and Master module view.
 
 #### Scenario: Visual layout hierarchy
 - **WHEN** the plugin window opens in any host DAW or a module bypass button is toggled
-- **THEN** all modules appear in their designated Left, Center, or Right column positions with zero overlapping sibling controls, header-integrated bypass and `?` help triggers, and bypassed modules visibly dim their inner controls
+- **THEN** all module views position their controls within their card bounds in their designated column positions with zero overlapping sibling controls, and bypassed modules visibly dim their controls
 
 ### Requirement: Interactive Dual X/Y Vector Pads
 The system SHALL provide a central interactive 2D X/Y Controller Pad (`xy_x`, `xy_y`) displaying the currently selected X and Y target names on the pad axes, paired with target selector dropdowns and bipolar depth controls (`xy_x_depth`, `xy_y_depth`) that modulate any target from the 21-item Modulatable Targets Enum.
@@ -61,3 +61,10 @@ The UI system SHALL render live waveform and phase visualizers in the LFO 1 and 
 #### Scenario: Passband visualizer slider tracking
 - **WHEN** user moves either the Low Cut or High Cut vertical slider
 - **THEN** the passband shaded rectangle updates smoothly matching the physical slider thumbs on the non-linear logarithmic scale without vertical inversion or offset error
+
+### Requirement: Unified Vector Brand Logo Display
+The UI system SHALL provide a scalable vector logo component (`WvZzLogoComponent`) in the top header bar rendering the geometric WvZz brand waveform monogram and plugin subtitle using resolution-independent vector paths (`juce::Path`), scaling sharply across 75% to 200% window dimensions.
+
+#### Scenario: Rendering brand logo at high DPI
+- **WHEN** the plugin window renders or resizes between 75% and 200% UI scale
+- **THEN** the WvZz logo badge and typography render with smooth anti-aliased vector paths without pixelation or bitmap blur
