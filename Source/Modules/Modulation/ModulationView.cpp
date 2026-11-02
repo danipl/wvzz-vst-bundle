@@ -55,9 +55,16 @@ ModulationView::ModulationView(juce::AudioProcessorValueTreeState& apvts,
                                dsp::AudioVisualizerSource* visualizerSource,
                                ui::IHelpOverlayHost* helpHost)
     : apvtsState(apvts),
-      modDSP(dsp)
+      modDSP(dsp),
+      card("MODULATION & X/Y", ui::WvZzLookAndFeel::neonGreen)
 {
-    juce::ignoreUnused(helpHost);
+    addAndMakeVisible(card);
+
+    if (helpHost != nullptr)
+    {
+        helpButton = std::make_unique<ui::HelpButtonComponent>("xy_pad", *helpHost);
+        addAndMakeVisible(*helpButton);
+    }
 
     // Setup Center Tab Buttons
     auto setupCenterTabBtn = [this](juce::TextButton& btn) {
@@ -72,7 +79,7 @@ ModulationView::ModulationView(juce::AudioProcessorValueTreeState& apvts,
     monitorTabButton.onClick = [this] { setCenterTab(true); };
 
     // X/Y Pad & Visualizer
-    xyPad = std::make_unique<ui::XYPadComponent>(apvtsState, "xy_x", "xy_y", "X/Y Pad", "Target X", "Target Y", ui::WvZzLookAndFeel::neonGreen);
+    xyPad = std::make_unique<ui::XYPadComponent>(apvtsState, "xy_x", "xy_y", "X/Y PAD", "X Target", "Y Target", ui::WvZzLookAndFeel::neonGreen);
     addAndMakeVisible(*xyPad);
 
     if (visualizerSource != nullptr)
@@ -116,60 +123,39 @@ ModulationView::ModulationView(juce::AudioProcessorValueTreeState& apvts,
     addAndMakeVisible(*lfo1Scope);
 
     initCombo(lfo1WaveBox, "lfo1_wave", "Wave", lfoWaves);
-
-    lfo1SyncToggle.button.setButtonText("SYNC");
-    lfo1SyncToggle.button.getProperties().set("isPill", true);
-    lfo1SyncToggle.button.getProperties().set("accentColor", static_cast<int>(ui::WvZzLookAndFeel::neonGreen.getARGB()));
-    lfo1SyncToggle.attachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-        apvtsState, "lfo1_sync", lfo1SyncToggle.button);
-    addAndMakeVisible(lfo1SyncToggle.button);
-
-    initRotary(lfo1RateKnob, "lfo1_rate", "Rate", false, ui::WvZzLookAndFeel::neonGreen);
-    initCombo(lfo1SyncDivBox, "lfo1_sync_div", "Div", lfoSyncDivs);
+    initToggle(lfo1SyncToggle, "lfo1_sync", "SYNC", true, ui::WvZzLookAndFeel::neonGreen);
+    initCombo(lfo1SyncDivBox, "lfo1_sync_div", "Sync Div", lfoSyncDivs);
     initCombo(lfo1TargetBox, "lfo1_target", "Target", modTargets);
+    initRotary(lfo1RateKnob, "lfo1_rate", "Rate", false, ui::WvZzLookAndFeel::neonGreen);
     initRotary(lfo1DepthKnob, "lfo1_depth", "Depth", true, ui::WvZzLookAndFeel::neonGreen);
-
-    lfo1SyncToggle.button.onStateChange = [this] {
-        bool sync = lfo1SyncToggle.button.getToggleState();
-        lfo1RateKnob.slider.setVisible(!sync);
-        lfo1RateKnob.label.setVisible(!sync);
-        lfo1SyncDivBox.box.setVisible(sync);
-        lfo1SyncDivBox.label.setVisible(sync);
-    };
-    lfo1SyncToggle.button.onStateChange();
 
     // LFO 2 Panel
     lfo2Scope = std::make_unique<LFOScopeComponent>(
         [this] { return lfo2WaveBox.box.getSelectedItemIndex(); },
         [this] { return modDSP.getLfo2Phase(); },
         [this] { return modDSP.getLfo2Snapshot(); },
-        ui::WvZzLookAndFeel::neonCyan);
+        ui::WvZzLookAndFeel::neonGreen);
     addAndMakeVisible(*lfo2Scope);
 
     initCombo(lfo2WaveBox, "lfo2_wave", "Wave", lfoWaves);
-
-    lfo2SyncToggle.button.setButtonText("SYNC");
-    lfo2SyncToggle.button.getProperties().set("isPill", true);
-    lfo2SyncToggle.button.getProperties().set("accentColor", static_cast<int>(ui::WvZzLookAndFeel::neonCyan.getARGB()));
-    lfo2SyncToggle.attachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-        apvtsState, "lfo2_sync", lfo2SyncToggle.button);
-    addAndMakeVisible(lfo2SyncToggle.button);
-
-    initRotary(lfo2RateKnob, "lfo2_rate", "Rate", false, ui::WvZzLookAndFeel::neonCyan);
-    initCombo(lfo2SyncDivBox, "lfo2_sync_div", "Div", lfoSyncDivs);
+    initToggle(lfo2SyncToggle, "lfo2_sync", "SYNC", true, ui::WvZzLookAndFeel::neonGreen);
+    initCombo(lfo2SyncDivBox, "lfo2_sync_div", "Sync Div", lfoSyncDivs);
     initCombo(lfo2TargetBox, "lfo2_target", "Target", modTargets);
-    initRotary(lfo2DepthKnob, "lfo2_depth", "Depth", true, ui::WvZzLookAndFeel::neonCyan);
-
-    lfo2SyncToggle.button.onStateChange = [this] {
-        bool sync = lfo2SyncToggle.button.getToggleState();
-        lfo2RateKnob.slider.setVisible(!sync);
-        lfo2RateKnob.label.setVisible(!sync);
-        lfo2SyncDivBox.box.setVisible(sync);
-        lfo2SyncDivBox.label.setVisible(sync);
-    };
-    lfo2SyncToggle.button.onStateChange();
+    initRotary(lfo2RateKnob, "lfo2_rate", "Rate", false, ui::WvZzLookAndFeel::neonGreen);
+    initRotary(lfo2DepthKnob, "lfo2_depth", "Depth", true, ui::WvZzLookAndFeel::neonGreen);
 
     setCenterTab(false);
+}
+
+void ModulationView::initToggle(ToggleControl& tc, const juce::String& paramId, const juce::String& text,
+                                bool isPill, juce::Colour accent)
+{
+    tc.button.setButtonText(text);
+    tc.button.getProperties().set("isPill", isPill);
+    tc.button.getProperties().set("accentColor", static_cast<int>(accent.getARGB()));
+    tc.attachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+        apvtsState, paramId, tc.button);
+    addAndMakeVisible(tc.button);
 }
 
 void ModulationView::initRotary(RotaryControl& rc, const juce::String& paramId, const juce::String& labelText,
@@ -217,12 +203,12 @@ void ModulationView::setCenterTab(bool showMonitor)
     xyTabButton.setColour(juce::TextButton::buttonColourId,
         !showMonitor ? ui::WvZzLookAndFeel::neonGreen.withAlpha(0.25f) : ui::WvZzLookAndFeel::cardBg.darker(0.2f));
     xyTabButton.setColour(juce::TextButton::textColourOffId,
-        !showMonitor ? ui::WvZzLookAndFeel::textPrimary : ui::WvZzLookAndFeel::textSecondary);
+        !showMonitor ? ui::WvZzLookAndFeel::neonGreen : ui::WvZzLookAndFeel::textSecondary);
 
     monitorTabButton.setColour(juce::TextButton::buttonColourId,
         showMonitor ? ui::WvZzLookAndFeel::neonCyan.withAlpha(0.25f) : ui::WvZzLookAndFeel::cardBg.darker(0.2f));
     monitorTabButton.setColour(juce::TextButton::textColourOffId,
-        showMonitor ? ui::WvZzLookAndFeel::textPrimary : ui::WvZzLookAndFeel::textSecondary);
+        showMonitor ? ui::WvZzLookAndFeel::neonCyan : ui::WvZzLookAndFeel::textSecondary);
 
     if (xyPad != nullptr) xyPad->setVisible(!showMonitor);
     if (signalVisualizer != nullptr) signalVisualizer->setVisible(showMonitor);
@@ -236,41 +222,14 @@ void ModulationView::setCenterTab(bool showMonitor)
     xyYDepthKnob.slider.setVisible(!showMonitor);
     xyYDepthKnob.label.setVisible(!showMonitor);
 
+    card.setTitle(showMonitor ? "ANALYSIS & MONITOR" : "MODULATION & X/Y");
+    card.setAccentColor(showMonitor ? ui::WvZzLookAndFeel::neonCyan : ui::WvZzLookAndFeel::neonGreen);
+
     resized();
 }
 
-void ModulationView::paint(juce::Graphics& g)
+void ModulationView::paint(juce::Graphics&)
 {
-    // Draw outer background and borders for LFO cards
-    auto bounds = getLocalBounds().toFloat();
-
-    // LFO 1 card container (mid section)
-    auto lfo1Area = juce::Rectangle<float>(bounds.getX(), 270.0f, bounds.getWidth(), 155.0f);
-    g.setColour(ui::WvZzLookAndFeel::cardBg);
-    g.fillRoundedRectangle(lfo1Area, 6.0f);
-    g.setColour(ui::WvZzLookAndFeel::cardBorder);
-    g.drawRoundedRectangle(lfo1Area, 6.0f, 1.0f);
-
-    // LFO 1 Header Title
-    g.setColour(ui::WvZzLookAndFeel::neonGreen);
-    g.fillEllipse(lfo1Area.getX() + 8.0f, lfo1Area.getY() + 10.0f, 6.0f, 6.0f);
-    g.setColour(ui::WvZzLookAndFeel::textPrimary);
-    g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
-    g.drawText("LFO 1", lfo1Area.getX() + 20.0f, lfo1Area.getY() + 5.0f, 80.0f, 16.0f, juce::Justification::centredLeft);
-
-    // LFO 2 card container (bottom section)
-    auto lfo2Area = juce::Rectangle<float>(bounds.getX(), 435.0f, bounds.getWidth(), 155.0f);
-    g.setColour(ui::WvZzLookAndFeel::cardBg);
-    g.fillRoundedRectangle(lfo2Area, 6.0f);
-    g.setColour(ui::WvZzLookAndFeel::cardBorder);
-    g.drawRoundedRectangle(lfo2Area, 6.0f, 1.0f);
-
-    // LFO 2 Header Title
-    g.setColour(ui::WvZzLookAndFeel::neonCyan);
-    g.fillEllipse(lfo2Area.getX() + 8.0f, lfo2Area.getY() + 10.0f, 6.0f, 6.0f);
-    g.setColour(ui::WvZzLookAndFeel::textPrimary);
-    g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
-    g.drawText("LFO 2", static_cast<int>(lfo2Area.getX() + 20.0f), static_cast<int>(lfo2Area.getY() + 5.0f), 80, 16, juce::Justification::centredLeft);
 }
 
 void ModulationView::updateVisuals()
@@ -281,95 +240,83 @@ void ModulationView::updateVisuals()
 
 void ModulationView::resized()
 {
-    auto bounds = getLocalBounds();
+    card.setBounds(getLocalBounds());
+    if (helpButton != nullptr)
+        helpButton->setBounds(card.getHeaderHelpBounds());
 
-    // 1. Tab Bar at top
-    auto tabArea = bounds.removeFromTop(24);
-    const int tabW = 90;
-    xyTabButton.setBounds(tabArea.getX(), tabArea.getY(), tabW, 22);
-    monitorTabButton.setBounds(tabArea.getX() + tabW + 6, tabArea.getY(), tabW, 22);
+    auto tabArea = juce::Rectangle<int>(getWidth() - 170, 5, 140, 18);
+    xyTabButton.setBounds(tabArea.removeFromLeft(68));
+    tabArea.removeFromLeft(4);
+    monitorTabButton.setBounds(tabArea.removeFromLeft(68));
 
-    bounds.removeFromTop(6);
+    auto content = card.getContentBounds();
 
-    // 2. Upper Region: XY Pad OR Signal Visualizer
-    auto upperArea = bounds.removeFromTop(226);
-    if (xyPad != nullptr)
-        xyPad->setBounds(upperArea.removeFromTop(170));
+    auto layoutKnob = [](RotaryControl& rc, juce::Rectangle<int> r) {
+        int labelH = 14;
+        auto knobArea = r.reduced(1);
+        rc.label.setBounds(knobArea.removeFromBottom(labelH));
+        rc.slider.setBounds(knobArea);
+    };
+
+    // XY Pad & Controls or Signal Visualizer
+    auto xyArea = content.removeFromTop(270);
     if (signalVisualizer != nullptr)
-        signalVisualizer->setBounds(upperArea.withY(tabArea.getBottom() + 6).withHeight(226));
+        signalVisualizer->setBounds(xyArea);
+    if (xyPad != nullptr)
+        xyPad->setBounds(xyArea.removeFromTop(175));
 
-    if (!isMonitorActive)
-    {
-        // 4 sub-controls below XY Pad: X Target, Y Target, X Depth, Y Depth
-        auto ctrlArea = upperArea;
-        const int colW = ctrlArea.getWidth() / 4;
-        xyXTargetBox.label.setBounds(ctrlArea.getX(), ctrlArea.getY(), colW, 14);
-        xyXTargetBox.box.setBounds(ctrlArea.getX(), ctrlArea.getY() + 16, colW - 4, 22);
+    xyArea.removeFromTop(4);
+    auto xyRow1 = xyArea.removeFromTop(42);
+    xyXTargetBox.label.setBounds(xyRow1.removeFromLeft(50));
+    xyXTargetBox.box.setBounds(xyRow1.removeFromLeft(145).reduced(2, 8));
+    layoutKnob(xyXDepthKnob, xyRow1.reduced(2, 0));
 
-        xyYTargetBox.label.setBounds(ctrlArea.getX() + colW, ctrlArea.getY(), colW, 14);
-        xyYTargetBox.box.setBounds(ctrlArea.getX() + colW, ctrlArea.getY() + 16, colW - 4, 22);
+    auto xyRow2 = xyArea;
+    xyYTargetBox.label.setBounds(xyRow2.removeFromLeft(50));
+    xyYTargetBox.box.setBounds(xyRow2.removeFromLeft(145).reduced(2, 8));
+    layoutKnob(xyYDepthKnob, xyRow2.reduced(2, 0));
 
-        xyXDepthKnob.slider.setBounds(ctrlArea.getX() + 2 * colW + (colW - 36) / 2, ctrlArea.getY(), 36, 36);
-        xyXDepthKnob.label.setBounds(ctrlArea.getX() + 2 * colW, ctrlArea.getY() + 38, colW, 12);
+    content.removeFromTop(6);
 
-        xyYDepthKnob.slider.setBounds(ctrlArea.getX() + 3 * colW + (colW - 36) / 2, ctrlArea.getY(), 36, 36);
-        xyYDepthKnob.label.setBounds(ctrlArea.getX() + 3 * colW, ctrlArea.getY() + 38, colW, 12);
-    }
+    // LFO 1 Panel (Height: 140)
+    auto lfo1Area = content.removeFromTop(140);
+    auto lfo1Top = lfo1Area.removeFromTop(26);
+    lfo1WaveBox.box.setBounds(lfo1Top.removeFromLeft(85));
+    lfo1Top.removeFromLeft(4);
+    lfo1SyncToggle.button.setBounds(lfo1Top.removeFromLeft(50).reduced(0, 2));
+    lfo1Top.removeFromLeft(4);
+    lfo1SyncDivBox.box.setBounds(lfo1Top.removeFromLeft(80));
+    lfo1Top.removeFromLeft(4);
+    lfo1TargetBox.box.setBounds(lfo1Top);
 
-    bounds.removeFromTop(14);
+    auto lfo1Mid = lfo1Area;
+    if (lfo1Scope != nullptr)
+        lfo1Scope->setBounds(lfo1Mid.removeFromLeft(110).reduced(2, 4));
 
-    // 3. LFO 1 Panel
-    auto lfo1Area = bounds.removeFromTop(155).reduced(8, 4);
-    lfo1Area.removeFromTop(22); // Header label space
-    const int scopeW = 100;
-    lfo1Scope->setBounds(lfo1Area.removeFromLeft(scopeW));
+    int l1Kw = lfo1Mid.getWidth() / 2;
+    layoutKnob(lfo1RateKnob, lfo1Mid.removeFromLeft(l1Kw));
+    layoutKnob(lfo1DepthKnob, lfo1Mid);
 
-    lfo1Area.removeFromLeft(12);
-    auto lfo1Controls = lfo1Area;
+    content.removeFromTop(6);
 
-    // Controls: Wave, Sync, Rate/Div, Target, Depth
-    const int cW = lfo1Controls.getWidth() / 3;
-    lfo1WaveBox.label.setBounds(lfo1Controls.getX(), lfo1Controls.getY(), cW, 14);
-    lfo1WaveBox.box.setBounds(lfo1Controls.getX(), lfo1Controls.getY() + 16, cW - 4, 22);
+    // LFO 2 Panel (Remaining height)
+    auto lfo2Area = content;
+    auto lfo2Top = lfo2Area.removeFromTop(26);
+    lfo2WaveBox.box.setBounds(lfo2Top.removeFromLeft(85));
+    lfo2Top.removeFromLeft(4);
+    lfo2SyncToggle.button.setBounds(lfo2Top.removeFromLeft(50).reduced(0, 2));
+    lfo2Top.removeFromLeft(4);
+    lfo2SyncDivBox.box.setBounds(lfo2Top.removeFromLeft(80));
+    lfo2Top.removeFromLeft(4);
+    lfo2TargetBox.box.setBounds(lfo2Top);
 
-    lfo1TargetBox.label.setBounds(lfo1Controls.getX(), lfo1Controls.getY() + 48, cW, 14);
-    lfo1TargetBox.box.setBounds(lfo1Controls.getX(), lfo1Controls.getY() + 64, cW - 4, 22);
+    auto lfo2Mid = lfo2Area;
+    if (lfo2Scope != nullptr)
+        lfo2Scope->setBounds(lfo2Mid.removeFromLeft(110).reduced(2, 4));
 
-    lfo1SyncToggle.button.setBounds(lfo1Controls.getX() + cW, lfo1Controls.getY() + 16, 48, 22);
-    lfo1RateKnob.slider.setBounds(lfo1Controls.getX() + cW + 4, lfo1Controls.getY() + 48, 44, 44);
-    lfo1RateKnob.label.setBounds(lfo1Controls.getX() + cW, lfo1Controls.getY() + 94, cW, 12);
-
-    lfo1SyncDivBox.label.setBounds(lfo1Controls.getX() + cW, lfo1Controls.getY() + 48, cW, 14);
-    lfo1SyncDivBox.box.setBounds(lfo1Controls.getX() + cW, lfo1Controls.getY() + 64, cW - 4, 22);
-
-    lfo1DepthKnob.slider.setBounds(lfo1Controls.getX() + 2 * cW + (cW - 44) / 2, lfo1Controls.getY() + 16, 44, 44);
-    lfo1DepthKnob.label.setBounds(lfo1Controls.getX() + 2 * cW, lfo1Controls.getY() + 62, cW, 12);
-
-    bounds.removeFromTop(10);
-
-    // 4. LFO 2 Panel
-    auto lfo2Area = bounds.removeFromTop(155).reduced(8, 4);
-    lfo2Area.removeFromTop(22);
-    lfo2Scope->setBounds(lfo2Area.removeFromLeft(scopeW));
-
-    lfo2Area.removeFromLeft(12);
-    auto lfo2Controls = lfo2Area;
-
-    lfo2WaveBox.label.setBounds(lfo2Controls.getX(), lfo2Controls.getY(), cW, 14);
-    lfo2WaveBox.box.setBounds(lfo2Controls.getX(), lfo2Controls.getY() + 16, cW - 4, 22);
-
-    lfo2TargetBox.label.setBounds(lfo2Controls.getX(), lfo2Controls.getY() + 48, cW, 14);
-    lfo2TargetBox.box.setBounds(lfo2Controls.getX(), lfo2Controls.getY() + 64, cW - 4, 22);
-
-    lfo2SyncToggle.button.setBounds(lfo2Controls.getX() + cW, lfo2Controls.getY() + 16, 48, 22);
-    lfo2RateKnob.slider.setBounds(lfo2Controls.getX() + cW + 4, lfo2Controls.getY() + 48, 44, 44);
-    lfo2RateKnob.label.setBounds(lfo2Controls.getX() + cW, lfo2Controls.getY() + 94, cW, 12);
-
-    lfo2SyncDivBox.label.setBounds(lfo2Controls.getX() + cW, lfo2Controls.getY() + 48, cW, 14);
-    lfo2SyncDivBox.box.setBounds(lfo2Controls.getX() + cW, lfo2Controls.getY() + 64, cW - 4, 22);
-
-    lfo2DepthKnob.slider.setBounds(lfo2Controls.getX() + 2 * cW + (cW - 44) / 2, lfo2Controls.getY() + 16, 44, 44);
-    lfo2DepthKnob.label.setBounds(lfo2Controls.getX() + 2 * cW, lfo2Controls.getY() + 62, cW, 12);
+    int l2Kw = lfo2Mid.getWidth() / 2;
+    layoutKnob(lfo2RateKnob, lfo2Mid.removeFromLeft(l2Kw));
+    layoutKnob(lfo2DepthKnob, lfo2Mid);
 }
 
 } // namespace wvzz::modules

@@ -4,12 +4,14 @@ namespace wvzz::modules {
 
 MasterView::MasterView(juce::AudioProcessorValueTreeState& apvts,
                        const juce::String& prefix,
-                       const IMeterSource* meterSource,
+                       const IMeterSource* outMeterSource,
+                       const IMeterSource* inMeterSource,
                        ui::IHelpOverlayHost* helpHost)
     : apvtsState(apvts),
       instancePrefix(prefix),
-      meter(meterSource),
-      card("Master", ui::WvZzLookAndFeel::neonAmber)
+      outMeter(outMeterSource),
+      inMeter(inMeterSource),
+      card("MASTER", ui::WvZzLookAndFeel::neonGreen)
 {
     addAndMakeVisible(card);
 
@@ -34,15 +36,21 @@ MasterView::MasterView(juce::AudioProcessorValueTreeState& apvts,
         addAndMakeVisible(*helpButton);
     }
 
-    // Rotary Knobs: Mix, Volume
-    initRotary(mixKnob, paramId("mix"), "Mix", ui::WvZzLookAndFeel::neonAmber);
-    initRotary(volKnob, paramId("vol"), "Volume", ui::WvZzLookAndFeel::neonAmber);
+    // Rotary Knobs: In Gain, Dry/Wet, Volume
+    initRotary(inputGainKnob, "input_gain", "In Gain", ui::WvZzLookAndFeel::neonGreen);
+    initRotary(mixKnob, paramId("mix"), "Dry/Wet", ui::WvZzLookAndFeel::neonGreen);
+    initRotary(volKnob, paramId("vol"), "Volume", ui::WvZzLookAndFeel::neonGreen);
 
-    // Stereo VU Meter
-    if (meter != nullptr)
+    // Stereo VU Meters
+    if (inMeter != nullptr)
     {
-        vuMeter = std::make_unique<ui::StereoVUMeterComponent>(*meter, "OUT");
-        addAndMakeVisible(*vuMeter);
+        inputMeter = std::make_unique<ui::StereoVUMeterComponent>(*inMeter, "IN");
+        addAndMakeVisible(*inputMeter);
+    }
+    if (outMeter != nullptr)
+    {
+        outputMeter = std::make_unique<ui::StereoVUMeterComponent>(*outMeter, "OUT");
+        addAndMakeVisible(*outputMeter);
     }
 }
 
@@ -70,8 +78,10 @@ void MasterView::paint(juce::Graphics&)
 
 void MasterView::updateVisuals()
 {
-    if (vuMeter != nullptr)
-        vuMeter->repaint();
+    if (inputMeter != nullptr)
+        inputMeter->repaint();
+    if (outputMeter != nullptr)
+        outputMeter->repaint();
 }
 
 void MasterView::resized()
@@ -82,26 +92,26 @@ void MasterView::resized()
         helpButton->setBounds(card.getHeaderHelpBounds());
 
     auto content = card.getContentBounds();
-    const int meterW = 30;
-    const int meterH = content.getHeight() - 8;
-    const int meterX = content.getX() + 6;
-    const int meterY = content.getY() + 4;
-    if (vuMeter != nullptr)
-        vuMeter->setBounds(meterX, meterY, meterW, meterH);
 
-    auto controlsArea = content.withTrimmedLeft(meterW + 12);
-    const int colW = controlsArea.getWidth() / 2;
-    const int knobSize = 46;
-    const int ky = controlsArea.getY() + (controlsArea.getHeight() - (knobSize + 16)) / 2;
+    auto vuArea = content.removeFromRight(56).reduced(1, 4);
+    int meterW = (vuArea.getWidth() - 4) / 2;
+    if (inputMeter != nullptr)
+        inputMeter->setBounds(vuArea.removeFromLeft(meterW));
+    vuArea.removeFromLeft(4);
+    if (outputMeter != nullptr)
+        outputMeter->setBounds(vuArea);
 
-    auto placeKnob = [&](RotaryControl& rc, int col) {
-        int cx = controlsArea.getX() + col * colW + (colW - knobSize) / 2;
-        rc.slider.setBounds(cx, ky, knobSize, knobSize);
-        rc.label.setBounds(controlsArea.getX() + col * colW, ky + knobSize + 2, colW, 14);
+    auto layoutKnob = [](RotaryControl& rc, juce::Rectangle<int> r) {
+        int labelH = 14;
+        auto knobArea = r.reduced(1);
+        rc.label.setBounds(knobArea.removeFromBottom(labelH));
+        rc.slider.setBounds(knobArea);
     };
 
-    placeKnob(mixKnob, 0);
-    placeKnob(volKnob, 1);
+    int mKw = content.getWidth() / 3;
+    layoutKnob(inputGainKnob, content.removeFromLeft(mKw));
+    layoutKnob(mixKnob, content.removeFromLeft(mKw));
+    layoutKnob(volKnob, content);
 }
 
 } // namespace wvzz::modules

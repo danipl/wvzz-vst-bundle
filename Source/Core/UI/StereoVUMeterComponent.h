@@ -98,25 +98,33 @@ private:
             return juce::jlimit(0.0f, 1.0f, (dB + 60.0f) / 60.0f);
         };
 
-        float peakHeight = levelToY(peak) * area.getHeight();
-        float rmsHeight  = levelToY(rms) * area.getHeight();
-        float holdY      = area.getBottom() - levelToY(peakHold) * area.getHeight();
+        juce::ignoreUnused(peak);
+        float rmsNorm  = levelToY(rms);
+        float holdNorm = levelToY(peakHold);
 
-        // 1. RMS bar (solid neon green / cyan)
-        auto rmsRect = area.removeFromBottom(rmsHeight);
-        g.setColour(juce::Colour(0xff00e676).withAlpha(0.6f));
-        g.fillRect(rmsRect);
+        float totalH = area.getHeight();
 
-        // 2. Peak bar (brighter, semi-transparent top cap)
-        auto peakRect = area.removeFromBottom(peakHeight - rmsHeight);
-        g.setColour(juce::Colour(0xff00e5ff));
-        g.fillRect(peakRect);
-
-        // 3. Peak hold needle
-        if (holdY >= area.getY() && holdY <= area.getBottom())
+        // Draw RMS level bar (solid fill)
+        if (rmsNorm > 0.001f)
         {
-            g.setColour(juce::Colour(0xffff9100)); // Neon Amber peak tick
-            g.drawHorizontalLine(static_cast<int>(holdY), area.getX(), area.getRight());
+            float barH = totalH * rmsNorm;
+            auto barRect = area.removeFromBottom(barH);
+
+            // Three-color vertical gradient: Green (-60 to -12 dB), Amber (-12 to -3 dB), Red (-3 to 0+ dB)
+            juce::ColourGradient grad(juce::Colour(0xff00e676), barRect.getX(), barRect.getBottom(),
+                                     juce::Colour(0xffff5252), barRect.getX(), barRect.getY(), false);
+            grad.addColour(0.7f, juce::Colour(0xffffab00)); // ~ -12 dB point
+
+            g.setGradientFill(grad);
+            g.fillRect(barRect);
+        }
+
+        // Draw floating Peak Hold line
+        if (holdNorm > 0.01f)
+        {
+            float lineY = area.getBottom() - (totalH * holdNorm);
+            g.setColour(holdNorm >= 0.95f ? juce::Colour(0xffff1744) : juce::Colour(0xffffffff));
+            g.drawHorizontalLine(static_cast<int>(lineY), area.getX(), area.getRight());
         }
     }
 

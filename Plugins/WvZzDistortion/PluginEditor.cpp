@@ -166,10 +166,10 @@ void WvZzDistortionAudioProcessorEditor::resized()
 
     // 1. Top Header Bar (Height: 48)
     auto headerArea = area.removeFromTop(48).reduced(12, 6);
-    logoComponent.setBounds(headerArea.removeFromLeft(90).reduced(0, 4));
-    headerArea.removeFromLeft(6);
-    subTitleLabel.setBounds(headerArea.removeFromLeft(250));
-    signalFlowLabel.setBounds(headerArea.removeFromLeft(220));
+    logoComponent.setBounds(headerArea.removeFromLeft(150).reduced(0, 4));
+    headerArea.removeFromLeft(4);
+    subTitleLabel.setBounds(headerArea.removeFromLeft(225));
+    signalFlowLabel.setBounds(headerArea.removeFromLeft(200));
 
     // Right side of header: Global bypass, Dice, and Preset Toolbar
     masterBypassToggle.button.setBounds(headerArea.removeFromRight(70).reduced(0, 4));

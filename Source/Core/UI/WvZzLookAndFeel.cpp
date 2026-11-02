@@ -144,7 +144,12 @@ void WvZzLookAndFeel::drawLinearSlider(juce::Graphics& g,
     auto bounds = juce::Rectangle<int>(x, y, width, height).toFloat();
     const float trackW = 6.0f;
     const float cx = bounds.getCentreX();
-    auto trackRect = juce::Rectangle<float>(cx - trackW * 0.5f, bounds.getY() + 4.0f, trackW, bounds.getHeight() - 8.0f);
+
+    const float trackTop = bounds.getY() + 4.0f;
+    const float trackBottom = bounds.getBottom() - 4.0f;
+    const float trackH = std::max(1.0f, trackBottom - trackTop);
+
+    auto trackRect = juce::Rectangle<float>(cx - trackW * 0.5f, trackTop, trackW, trackH);
 
     // Track background
     g.setColour(trackBg);
@@ -152,15 +157,17 @@ void WvZzLookAndFeel::drawLinearSlider(juce::Graphics& g,
     g.setColour(cardBorder);
     g.drawRoundedRectangle(trackRect, 3.0f, 1.0f);
 
-    // Slider active track to thumb
-    auto activeRect = trackRect.withTop(sliderPos);
+    // Slider active track from sliderPos down to trackBottom
+    const float clampedPos = juce::jlimit(trackTop, trackBottom, sliderPos);
+    auto activeRect = juce::Rectangle<float>(trackRect.getX(), clampedPos, trackRect.getWidth(), trackBottom - clampedPos);
     g.setColour(neonCyan.withAlpha(0.65f));
     g.fillRoundedRectangle(activeRect, 3.0f);
 
-    // Thumb fader cap
+    // Thumb fader cap (14px high) centered at sliderPos
     const float thumbH = 14.0f;
+    const float halfThumbH = thumbH * 0.5f;
     const float thumbW = juce::jmin(bounds.getWidth() - 2.0f, 26.0f);
-    auto thumbRect = juce::Rectangle<float>(cx - thumbW * 0.5f, sliderPos - thumbH * 0.5f, thumbW, thumbH);
+    auto thumbRect = juce::Rectangle<float>(cx - thumbW * 0.5f, clampedPos - halfThumbH, thumbW, thumbH);
 
     g.setColour(cardBg.brighter(0.12f));
     g.fillRoundedRectangle(thumbRect, 3.0f);
@@ -169,7 +176,7 @@ void WvZzLookAndFeel::drawLinearSlider(juce::Graphics& g,
 
     // Thumb center indicator line
     g.setColour(textPrimary);
-    g.drawHorizontalLine(static_cast<int>(sliderPos), thumbRect.getX() + 3.0f, thumbRect.getRight() - 3.0f);
+    g.drawHorizontalLine(static_cast<int>(clampedPos), thumbRect.getX() + 3.0f, thumbRect.getRight() - 3.0f);
 
     juce::ignoreUnused(slider);
 }

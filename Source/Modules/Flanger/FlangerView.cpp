@@ -7,7 +7,7 @@ FlangerView::FlangerView(juce::AudioProcessorValueTreeState& apvts,
                          ui::IHelpOverlayHost* helpHost)
     : apvtsState(apvts),
       instancePrefix(prefix),
-      card("Flanger", ui::WvZzLookAndFeel::neonCyan)
+      card("FLANGER", ui::WvZzLookAndFeel::neonCyan)
 {
     addAndMakeVisible(card);
 
@@ -67,18 +67,16 @@ void FlangerView::resized()
         helpButton->setBounds(card.getHeaderHelpBounds());
 
     auto content = card.getContentBounds();
-    const int colW = content.getWidth() / 2;
-    const int knobSize = 46;
-    const int ky = content.getY() + (content.getHeight() - (knobSize + 16)) / 2;
 
-    auto placeKnob = [&](RotaryControl& rc, int col) {
-        int cx = content.getX() + col * colW + (colW - knobSize) / 2;
-        rc.slider.setBounds(cx, ky, knobSize, knobSize);
-        rc.label.setBounds(content.getX() + col * colW, ky + knobSize + 2, colW, 14);
+    auto layoutKnob = [](RotaryControl& rc, juce::Rectangle<int> r) {
+        int labelH = 14;
+        auto knobArea = r.reduced(1);
+        rc.label.setBounds(knobArea.removeFromBottom(labelH));
+        rc.slider.setBounds(knobArea);
     };
 
-    placeKnob(rateKnob, 0);
-    placeKnob(amountKnob, 1);
+    layoutKnob(rateKnob, content.removeFromLeft(content.getWidth() / 2));
+    layoutKnob(amountKnob, content);
 }
 
 } // namespace wvzz::modules

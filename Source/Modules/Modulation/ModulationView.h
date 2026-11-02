@@ -1,6 +1,8 @@
 #pragma once
 
 #include "../../Core/Interfaces/IModuleView.h"
+#include "../../Core/UI/ModuleCardComponent.h"
+#include "../../Core/UI/HelpButtonComponent.h"
 #include "../../Core/UI/XYPadComponent.h"
 #include "../../Core/UI/SignalComparisonComponent.h"
 #include "../../Core/UI/WvZzLookAndFeel.h"
@@ -70,13 +72,19 @@ private:
                     bool isBipolar = false, juce::Colour accent = ui::WvZzLookAndFeel::neonGreen);
     void initCombo(ComboControl& cc, const juce::String& paramId, const juce::String& labelText,
                    const juce::StringArray& items);
+    void initToggle(ToggleControl& tc, const juce::String& paramId, const juce::String& text,
+                    bool isPill = true, juce::Colour accent = ui::WvZzLookAndFeel::neonGreen);
 
     void setCenterTab(bool showMonitor);
 
     juce::AudioProcessorValueTreeState& apvtsState;
     ModulationDSP& modDSP;
 
-    // Center Tab Bar
+    // Card container
+    ui::ModuleCardComponent card;
+    std::unique_ptr<ui::HelpButtonComponent> helpButton;
+
+    // Center Tab Bar in header
     juce::TextButton xyTabButton { "X/Y PAD" };
     juce::TextButton monitorTabButton { "MONITOR" };
     bool isMonitorActive { false };
@@ -94,18 +102,18 @@ private:
     std::unique_ptr<LFOScopeComponent> lfo1Scope;
     ComboControl lfo1WaveBox;
     ToggleControl lfo1SyncToggle;
-    RotaryControl lfo1RateKnob;
     ComboControl lfo1SyncDivBox;
     ComboControl lfo1TargetBox;
+    RotaryControl lfo1RateKnob;
     RotaryControl lfo1DepthKnob;
 
     // LFO 2 Panel
     std::unique_ptr<LFOScopeComponent> lfo2Scope;
     ComboControl lfo2WaveBox;
     ToggleControl lfo2SyncToggle;
-    RotaryControl lfo2RateKnob;
     ComboControl lfo2SyncDivBox;
     ComboControl lfo2TargetBox;
+    RotaryControl lfo2RateKnob;
     RotaryControl lfo2DepthKnob;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ModulationView)

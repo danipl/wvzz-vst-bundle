@@ -58,6 +58,27 @@ public:
                               : inRmsRight.load(std::memory_order_relaxed);
     }
 
+    class InputMeterSource : public IMeterSource
+    {
+    public:
+        explicit InputMeterSource(const MasterDSP& parent) : master(parent) {}
+        [[nodiscard]] float getPeakLevel(int channel) const noexcept override
+        {
+            return master.getInputPeakLevel(channel);
+        }
+        [[nodiscard]] float getRmsLevel(int channel) const noexcept override
+        {
+            return master.getInputRmsLevel(channel);
+        }
+    private:
+        const MasterDSP& master;
+    };
+
+    [[nodiscard]] const IMeterSource& getInputMeterSource() const noexcept
+    {
+        return inMeter;
+    }
+
     void setParameters(float inputGainDb, float mixNorm, float volDb, bool bypass = false) noexcept;
 
     // Helper to apply input gain before processing chain
@@ -99,6 +120,8 @@ private:
     std::atomic<float> inPeakRight { 0.0f };
     std::atomic<float> inRmsLeft   { 0.0f };
     std::atomic<float> inRmsRight  { 0.0f };
+
+    InputMeterSource inMeter { *this };
 };
 
 } // namespace wvzz::modules

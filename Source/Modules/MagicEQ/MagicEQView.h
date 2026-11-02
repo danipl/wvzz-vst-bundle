@@ -35,7 +35,7 @@ private:
     };
 
     void initRotary(RotaryControl& rc, const juce::String& paramId, const juce::String& labelText,
-                    juce::Colour accent = ui::WvZzLookAndFeel::neonAmber);
+                    bool isBipolar = false, juce::Colour accent = ui::WvZzLookAndFeel::neonAmber);
 
     juce::AudioProcessorValueTreeState& apvtsState;
     juce::String instancePrefix;

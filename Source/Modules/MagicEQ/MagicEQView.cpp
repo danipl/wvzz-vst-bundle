@@ -7,7 +7,7 @@ MagicEQView::MagicEQView(juce::AudioProcessorValueTreeState& apvts,
                          ui::IHelpOverlayHost* helpHost)
     : apvtsState(apvts),
       instancePrefix(prefix),
-      card("Magic EQ", ui::WvZzLookAndFeel::neonAmber)
+      card("MAGIC EQ", ui::WvZzLookAndFeel::neonAmber)
 {
     addAndMakeVisible(card);
 
@@ -33,8 +33,8 @@ MagicEQView::MagicEQView(juce::AudioProcessorValueTreeState& apvts,
     }
 
     // Rotary Knobs: Amount, Tune
-    initRotary(amountKnob, paramId("amount"), "Amount", ui::WvZzLookAndFeel::neonAmber);
-    initRotary(tuneKnob,   paramId("tune"),   "Tune",   ui::WvZzLookAndFeel::neonAmber);
+    initRotary(amountKnob, paramId("amount"), "Amount", true, ui::WvZzLookAndFeel::neonAmber);
+    initRotary(tuneKnob,   paramId("tune"),   "Tune",   false, ui::WvZzLookAndFeel::neonAmber);
 
     // Phat Mode Toggle Button
     phatToggle.button.setButtonText("PHAT");
@@ -45,11 +45,14 @@ MagicEQView::MagicEQView(juce::AudioProcessorValueTreeState& apvts,
     addAndMakeVisible(phatToggle.button);
 }
 
-void MagicEQView::initRotary(RotaryControl& rc, const juce::String& paramId, const juce::String& labelText, juce::Colour accent)
+void MagicEQView::initRotary(RotaryControl& rc, const juce::String& paramId, const juce::String& labelText,
+                            bool isBipolar, juce::Colour accent)
 {
     rc.slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     rc.slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     rc.slider.getProperties().set("accentColor", static_cast<int>(accent.getARGB()));
+    if (isBipolar)
+        rc.slider.getProperties().set("isBipolar", true);
     rc.slider.setColour(juce::Slider::rotarySliderFillColourId, accent);
     addAndMakeVisible(rc.slider);
 
@@ -75,25 +78,18 @@ void MagicEQView::resized()
         helpButton->setBounds(card.getHeaderHelpBounds());
 
     auto content = card.getContentBounds();
-    const int colW = content.getWidth() / 3;
-    const int knobSize = 46;
-    const int ky = content.getY() + (content.getHeight() - (knobSize + 16)) / 2;
+    auto meqTop = content.removeFromTop(20);
+    phatToggle.button.setBounds(meqTop.removeFromRight(50).reduced(0, 1));
 
-    auto placeKnob = [&](RotaryControl& rc, int col) {
-        int cx = content.getX() + col * colW + (colW - knobSize) / 2;
-        rc.slider.setBounds(cx, ky, knobSize, knobSize);
-        rc.label.setBounds(content.getX() + col * colW, ky + knobSize + 2, colW, 14);
+    auto layoutKnob = [](RotaryControl& rc, juce::Rectangle<int> r) {
+        int labelH = 14;
+        auto knobArea = r.reduced(1);
+        rc.label.setBounds(knobArea.removeFromBottom(labelH));
+        rc.slider.setBounds(knobArea);
     };
 
-    placeKnob(amountKnob, 0);
-    placeKnob(tuneKnob, 1);
-
-    // Place PHAT button in column 2
-    const int btnW = 44;
-    const int btnH = 22;
-    const int bx = content.getX() + 2 * colW + (colW - btnW) / 2;
-    const int by = content.getY() + (content.getHeight() - btnH) / 2;
-    phatToggle.button.setBounds(bx, by, btnW, btnH);
+    layoutKnob(amountKnob, content.removeFromLeft(content.getWidth() / 2));
+    layoutKnob(tuneKnob, content);
 }
 
 } // namespace wvzz::modules

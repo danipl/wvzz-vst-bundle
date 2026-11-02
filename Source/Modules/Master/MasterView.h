@@ -16,7 +16,8 @@ class MasterView : public ui::IModuleView
 public:
     MasterView(juce::AudioProcessorValueTreeState& apvts,
                const juce::String& prefix,
-               const IMeterSource* meterSource,
+               const IMeterSource* outMeterSource,
+               const IMeterSource* inMeterSource,
                ui::IHelpOverlayHost* helpHost);
     ~MasterView() override = default;
 
@@ -39,21 +40,24 @@ private:
     };
 
     void initRotary(RotaryControl& rc, const juce::String& paramId, const juce::String& labelText,
-                    juce::Colour accent = ui::WvZzLookAndFeel::neonAmber);
+                    juce::Colour accent = ui::WvZzLookAndFeel::neonGreen);
 
     juce::AudioProcessorValueTreeState& apvtsState;
     juce::String instancePrefix;
-    const IMeterSource* meter;
+    const IMeterSource* outMeter;
+    const IMeterSource* inMeter;
 
     ui::ModuleCardComponent card;
 
     ToggleControl bypassToggle;
     std::unique_ptr<ui::HelpButtonComponent> helpButton;
 
+    RotaryControl inputGainKnob;
     RotaryControl mixKnob;
     RotaryControl volKnob;
 
-    std::unique_ptr<ui::StereoVUMeterComponent> vuMeter;
+    std::unique_ptr<ui::StereoVUMeterComponent> inputMeter;
+    std::unique_ptr<ui::StereoVUMeterComponent> outputMeter;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MasterView)
 };

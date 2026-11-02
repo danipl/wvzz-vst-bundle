@@ -7,7 +7,7 @@ DistortionView::DistortionView(juce::AudioProcessorValueTreeState& apvts,
                                ui::IHelpOverlayHost* helpHost)
     : apvtsState(apvts),
       instancePrefix(prefix),
-      card("Distortion", ui::WvZzLookAndFeel::neonAmber)
+      card("DISTORTION", ui::WvZzLookAndFeel::neonAmber)
 {
     addAndMakeVisible(card);
 
@@ -70,24 +70,24 @@ void DistortionView::resized()
 
     auto content = card.getContentBounds();
 
-    // 2x2 grid for 4 knobs
-    const int rowHeight = content.getHeight() / 2;
-    const int colWidth = content.getWidth() / 2;
-    const int knobSize = 48;
-
-    auto placeKnob = [&](RotaryControl& rc, int col, int row) {
-        int cellX = content.getX() + col * colWidth;
-        int cellY = content.getY() + row * rowHeight;
-        int kx = cellX + (colWidth - knobSize) / 2;
-        int ky = cellY + 6;
-        rc.slider.setBounds(kx, ky, knobSize, knobSize);
-        rc.label.setBounds(cellX, ky + knobSize + 2, colWidth, 14);
+    auto layoutKnob = [](RotaryControl& rc, juce::Rectangle<int> r) {
+        int labelH = 14;
+        auto knobArea = r.reduced(4, 2);
+        rc.label.setBounds(knobArea.removeFromBottom(labelH));
+        rc.slider.setBounds(knobArea);
     };
 
-    placeKnob(mechKnob, 0, 0);
-    placeKnob(tubeKnob, 1, 0);
-    placeKnob(bitKnob, 0, 1);
-    placeKnob(xcitaKnob, 1, 1);
+    // 2x2 grid for generous knob sizing and balanced vertical spacing
+    const int rowHeight = content.getHeight() / 2;
+    auto topRow = content.removeFromTop(rowHeight);
+    auto bottomRow = content;
+
+    const int colWidth = topRow.getWidth() / 2;
+    layoutKnob(mechKnob, topRow.removeFromLeft(colWidth));
+    layoutKnob(tubeKnob, topRow);
+
+    layoutKnob(bitKnob, bottomRow.removeFromLeft(colWidth));
+    layoutKnob(xcitaKnob, bottomRow);
 }
 
 } // namespace wvzz::modules

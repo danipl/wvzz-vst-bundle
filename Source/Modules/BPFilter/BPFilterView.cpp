@@ -4,25 +4,32 @@ namespace wvzz::modules {
 
 void BPFilterView::PassbandVisualizer::paint(juce::Graphics& g)
 {
-    auto bounds = getLocalBounds().toFloat().reduced(2.0f);
+    auto bounds = getLocalBounds().toFloat();
+    const float trackTop = bounds.getY() + 4.0f;
+    const float trackBottom = bounds.getBottom() - 4.0f;
+    const float trackHeight = std::max(1.0f, trackBottom - trackTop);
+
+    auto bgRect = juce::Rectangle<float>(bounds.getX(), trackTop, bounds.getWidth(), trackHeight);
+
     g.setColour(ui::WvZzLookAndFeel::trackBg);
-    g.fillRoundedRectangle(bounds, 4.0f);
+    g.fillRoundedRectangle(bgRect, 3.0f);
     g.setColour(ui::WvZzLookAndFeel::cardBorder);
-    g.drawRoundedRectangle(bounds, 4.0f, 1.0f);
+    g.drawRoundedRectangle(bgRect, 3.0f, 1.0f);
 
     const float lowProp = static_cast<float>(lowSlider.valueToProportionOfLength(lowSlider.getValue()));
     const float highProp = static_cast<float>(highSlider.valueToProportionOfLength(highSlider.getValue()));
 
-    const float yLow = bounds.getBottom() - lowProp * bounds.getHeight();
-    const float yHigh = bounds.getBottom() - highProp * bounds.getHeight();
+    // y position matching track
+    const float yLow = trackBottom - lowProp * trackHeight;
+    const float yHigh = trackBottom - highProp * trackHeight;
 
     const float passTop = std::min(yLow, yHigh);
     const float passBottom = std::max(yLow, yHigh);
 
     if (passBottom - passTop > 1.0f)
     {
-        auto passRect = juce::Rectangle<float>(bounds.getX() + 2.0f, passTop,
-                                               bounds.getWidth() - 4.0f, passBottom - passTop);
+        auto passRect = juce::Rectangle<float>(bgRect.getX() + 1.0f, passTop,
+                                               bgRect.getWidth() - 2.0f, passBottom - passTop);
         g.setColour(ui::WvZzLookAndFeel::neonCyan.withAlpha(0.28f));
         g.fillRoundedRectangle(passRect, 2.0f);
     }
@@ -33,7 +40,7 @@ BPFilterView::BPFilterView(juce::AudioProcessorValueTreeState& apvts,
                            ui::IHelpOverlayHost* helpHost)
     : apvtsState(apvts),
       instancePrefix(prefix),
-      card("BP Filter", ui::WvZzLookAndFeel::neonCyan)
+      card("BP FILTER & SPLIT", ui::WvZzLookAndFeel::neonCyan)
 {
     addAndMakeVisible(card);
 
@@ -195,39 +202,42 @@ void BPFilterView::resized()
 
     auto content = card.getContentBounds();
 
-    // Upper area for faders, passband visualizer, and labels (approx height 155px)
-    auto topArea = content.removeFromTop(155);
+    // Link pill button at top of BP card
+    auto bpTopRow = content.removeFromTop(20);
+    linkToggle.button.setBounds(bpTopRow.removeFromRight(55));
 
-    const int sliderWidth = 32;
-    const int passbandWidth = 38;
-    const int sliderX = content.getX() + 18;
-    const int faderHeight = 110;
-    const int faderY = topArea.getY() + 10;
+    // Vertical Cutoff Sliders Area (Height 150)
+    auto bpSliderArea = content.removeFromTop(150);
+    auto s1 = bpSliderArea.removeFromLeft(bpSliderArea.getWidth() / 2 - 12);
+    lowCutLabel.setBounds(s1.removeFromBottom(16));
+    lowCutSlider.setBounds(s1.reduced(10, 0));
 
-    lowCutSlider.setBounds(sliderX, faderY, sliderWidth, faderHeight);
-    passbandVisualizer->setBounds(sliderX + sliderWidth + 4, faderY, passbandWidth, faderHeight);
-    highCutSlider.setBounds(sliderX + sliderWidth + passbandWidth + 8, faderY, sliderWidth, faderHeight);
+    auto s2 = bpSliderArea.removeFromRight(bpSliderArea.getWidth() - 24);
+    highCutLabel.setBounds(s2.removeFromBottom(16));
+    highCutSlider.setBounds(s2.reduced(10, 0));
 
-    lowCutLabel.setBounds(sliderX - 6, faderY + faderHeight + 4, sliderWidth + 12, 16);
-    highCutLabel.setBounds(sliderX + sliderWidth + passbandWidth + 2, faderY + faderHeight + 4, sliderWidth + 12, 16);
+    if (passbandVisualizer != nullptr)
+    {
+        // Align passband visualizer top and bottom precisely with the sliders' bounds
+        auto sBounds = lowCutSlider.getBounds();
+        passbandVisualizer->setBounds(bpSliderArea.getX() + 2, sBounds.getY(),
+                                      bpSliderArea.getWidth() - 4, sBounds.getHeight());
+    }
 
-    linkToggle.button.setBounds(sliderX + sliderWidth + 4, faderY + faderHeight + 2, passbandWidth, 18);
+    content.removeFromTop(6);
 
-    // Lower area for 3 rotary knobs: Low Res, High Res, BR Mix
-    auto bottomArea = content.removeFromTop(75);
-    const int knobW = bottomArea.getWidth() / 3;
-    const int knobSize = 48;
-    const int knobY = bottomArea.getY() + 4;
-
-    auto placeKnob = [&](RotaryControl& rc, int col) {
-        int cx = bottomArea.getX() + col * knobW + (knobW - knobSize) / 2;
-        rc.slider.setBounds(cx, knobY, knobSize, knobSize);
-        rc.label.setBounds(bottomArea.getX() + col * knobW, knobY + knobSize + 2, knobW, 14);
+    auto layoutKnob = [](RotaryControl& rc, juce::Rectangle<int> r) {
+        int labelH = 14;
+        auto knobArea = r.reduced(1);
+        rc.label.setBounds(knobArea.removeFromBottom(labelH));
+        rc.slider.setBounds(knobArea);
     };
 
-    placeKnob(lowResKnob, 0);
-    placeKnob(highResKnob, 1);
-    placeKnob(brMixKnob, 2);
+    // Bottom Knobs Row
+    int bpKw = content.getWidth() / 3;
+    layoutKnob(lowResKnob, content.removeFromLeft(bpKw));
+    layoutKnob(highResKnob, content.removeFromLeft(bpKw));
+    layoutKnob(brMixKnob, content);
 }
 
 } // namespace wvzz::modules

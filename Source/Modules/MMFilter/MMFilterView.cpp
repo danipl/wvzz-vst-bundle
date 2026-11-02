@@ -8,7 +8,7 @@ MMFilterView::MMFilterView(juce::AudioProcessorValueTreeState& apvts,
                            ui::IHelpOverlayHost* helpHost)
     : apvtsState(apvts),
       instancePrefix(prefix),
-      card("MM Filter", ui::WvZzLookAndFeel::neonGreen)
+      card("MM FILTER", ui::WvZzLookAndFeel::neonGreen)
 {
     addAndMakeVisible(card);
 
@@ -49,12 +49,12 @@ MMFilterView::MMFilterView(juce::AudioProcessorValueTreeState& apvts,
         apvtsState, paramId("type"), typeBox.box);
 
     // Rotary Knobs
-    initRotary(cutoffKnob,   paramId("cutoff"),    "Cutoff",    false, ui::WvZzLookAndFeel::neonGreen);
-    initRotary(resKnob,      paramId("res"),       "Resonance", false, ui::WvZzLookAndFeel::neonGreen);
-    initRotary(mixKnob,      paramId("mix"),       "Mix",       false, ui::WvZzLookAndFeel::neonGreen);
-    initRotary(envAttKnob,   paramId("env_att"),   "Env Att",   false, ui::WvZzLookAndFeel::neonGreen);
-    initRotary(envRelKnob,   paramId("env_rel"),   "Env Rel",   false, ui::WvZzLookAndFeel::neonGreen);
-    initRotary(envDepthKnob, paramId("env_depth"), "Env Mod",   true,  ui::WvZzLookAndFeel::neonGreen);
+    initRotary(cutoffKnob,   paramId("cutoff"),    "Cutoff",  false, ui::WvZzLookAndFeel::neonGreen);
+    initRotary(resKnob,      paramId("res"),       "Res",     false, ui::WvZzLookAndFeel::neonGreen);
+    initRotary(mixKnob,      paramId("mix"),       "Mix",     false, ui::WvZzLookAndFeel::neonGreen);
+    initRotary(envAttKnob,   paramId("env_att"),   "Attack",  false, ui::WvZzLookAndFeel::neonGreen);
+    initRotary(envRelKnob,   paramId("env_rel"),   "Release", false, ui::WvZzLookAndFeel::neonGreen);
+    initRotary(envDepthKnob, paramId("env_depth"), "Env Mod", true,  ui::WvZzLookAndFeel::neonGreen);
 }
 
 void MMFilterView::initRotary(RotaryControl& rc, const juce::String& paramId, const juce::String& labelText,
@@ -91,38 +91,28 @@ void MMFilterView::resized()
 
     auto content = card.getContentBounds();
 
-    // Top combo box
-    auto typeArea = content.removeFromTop(28);
-    typeBox.label.setBounds(typeArea.removeFromLeft(65));
-    typeArea.removeFromLeft(4);
-    typeBox.box.setBounds(typeArea);
+    auto mmTop = content.removeFromTop(26);
+    typeBox.label.setBounds(mmTop.removeFromLeft(70));
+    typeBox.box.setBounds(mmTop.removeFromLeft(170).reduced(2, 2));
 
-    content.removeFromTop(6);
-
-    // Row 1: Cutoff, Res, Mix
-    auto row1 = content.removeFromTop(68);
-    const int colW1 = row1.getWidth() / 3;
-    const int knobSize = 46;
-
-    auto placeKnob = [](RotaryControl& rc, juce::Rectangle<int> colRect, int kSize) {
-        int kx = colRect.getX() + (colRect.getWidth() - kSize) / 2;
-        rc.slider.setBounds(kx, colRect.getY() + 2, kSize, kSize);
-        rc.label.setBounds(colRect.getX(), colRect.getY() + kSize + 2, colRect.getWidth(), 14);
+    auto layoutKnob = [](RotaryControl& rc, juce::Rectangle<int> r) {
+        int labelH = 14;
+        auto knobArea = r.reduced(1);
+        rc.label.setBounds(knobArea.removeFromBottom(labelH));
+        rc.slider.setBounds(knobArea);
     };
 
-    placeKnob(cutoffKnob, row1.removeFromLeft(colW1), knobSize);
-    placeKnob(resKnob, row1.removeFromLeft(colW1), knobSize);
-    placeKnob(mixKnob, row1, knobSize);
+    auto mmRow1 = content.removeFromTop(62);
+    int mmKw1 = mmRow1.getWidth() / 4;
+    layoutKnob(cutoffKnob, mmRow1.removeFromLeft(mmKw1));
+    layoutKnob(resKnob, mmRow1.removeFromLeft(mmKw1));
+    layoutKnob(mixKnob, mmRow1.removeFromLeft(mmKw1));
+    layoutKnob(envDepthKnob, mmRow1);
 
-    content.removeFromTop(6);
-
-    // Row 2: Env Att, Env Rel, Env Mod
-    auto row2 = content.removeFromTop(68);
-    const int colW2 = row2.getWidth() / 3;
-
-    placeKnob(envAttKnob, row2.removeFromLeft(colW2), knobSize);
-    placeKnob(envRelKnob, row2.removeFromLeft(colW2), knobSize);
-    placeKnob(envDepthKnob, row2, knobSize);
+    auto mmRow2 = content;
+    int mmKw2 = mmRow2.getWidth() / 2;
+    layoutKnob(envAttKnob, mmRow2.removeFromLeft(mmKw2));
+    layoutKnob(envRelKnob, mmRow2);
 }
 
 } // namespace wvzz::modules

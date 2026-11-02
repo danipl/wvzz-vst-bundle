@@ -38,7 +38,7 @@ WvZzDistortionAudioProcessor::WvZzDistortionAudioProcessor()
       flgModule("flg"),
       meqModule("meq"),
       compModule("comp"),
-      modModule("mod"),
+      modModule("mod", &visualizerSource),
       masterModule("master"),
       apvts(*this, nullptr, "Parameters", createAggregatedLayout(bpModule, distModule, mmModule, flgModule, meqModule, compModule, modModule, masterModule))
 {
@@ -274,6 +274,8 @@ void WvZzDistortionAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer
 void WvZzDistortionAudioProcessor::randomizeParameters()
 {
     juce::Random rng;
+
+    // Randomize all 8 modules DSP internal state (for direct testing)
     bpModule.getDSP().randomize(rng);
     distModule.getDSP().randomize(rng);
     mmModule.getDSP().randomize(rng);
@@ -282,6 +284,59 @@ void WvZzDistortionAudioProcessor::randomizeParameters()
     compModule.getDSP().randomize(rng);
     modModule.getDSP().randomize(rng);
     masterModule.getDSP().randomize(rng);
+
+    // Randomize parameters through APVTS to notify GUI controls and host
+    auto setRand = [this, &rng](const juce::String& paramId, float minVal, float maxVal) {
+        if (auto* param = apvts.getParameter(paramId))
+        {
+            float norm = rng.nextFloat();
+            float val = minVal + norm * (maxVal - minVal);
+            param->setValueNotifyingHost(param->convertTo0to1(val));
+        }
+    };
+
+    // BP Filter
+    setRand("bp_low_cut", 30.0f, 800.0f);
+    setRand("bp_high_cut", 1200.0f, 16000.0f);
+    setRand("bp_low_res", 0.0f, 0.7f);
+    setRand("bp_high_res", 0.0f, 0.7f);
+    setRand("bp_br_mix", 0.0f, 0.5f);
+
+    // Distortion: randomize all 4 saturator knobs (Mech, Tube, Bitcrush, Xcita)
+    setRand("dist_mech", 0.0f, 0.85f);
+    setRand("dist_tube", 0.0f, 0.85f);
+    setRand("dist_bit", 0.0f, 0.5f);
+    setRand("dist_xcita", 0.0f, 0.6f);
+
+    // MM Filter: Randomize filter type (0 to 11) and cutoff/res/env
+    if (auto* p = apvts.getParameter("mm_type"))
+        p->setValueNotifyingHost(rng.nextFloat());
+    setRand("mm_cutoff", 100.0f, 8000.0f);
+    setRand("mm_res", 0.1f, 0.8f);
+    setRand("mm_mix", 0.4f, 1.0f);
+    setRand("mm_env_depth", -0.8f, 0.8f);
+    setRand("mm_env_att", 1.0f, 300.0f);
+    setRand("mm_env_rel", 20.0f, 800.0f);
+
+    // Flanger
+    setRand("flg_rate", 0.05f, 2.5f);
+    setRand("flg_amount", 0.0f, 0.7f);
+
+    // Magic EQ
+    setRand("meq_amount", 0.0f, 0.7f);
+    setRand("meq_tune", 40.0f, 150.0f);
+
+    // Compressor
+    setRand("comp_amount", 0.0f, 0.8f);
+    setRand("comp_release", 20.0f, 400.0f);
+
+    // LFO & Mod
+    setRand("lfo1_rate", 0.1f, 8.0f);
+    setRand("lfo1_depth", -1.0f, 1.0f);
+    setRand("lfo2_rate", 0.1f, 8.0f);
+    setRand("lfo2_depth", -1.0f, 1.0f);
+    setRand("xy_x", 0.1f, 0.9f);
+    setRand("xy_y", 0.1f, 0.9f);
 }
 
 bool WvZzDistortionAudioProcessor::hasEditor() const

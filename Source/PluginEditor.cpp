@@ -24,26 +24,32 @@ void CamelPhatAudioProcessorEditor::ContentContainer::paint(juce::Graphics& g)
 
 void CamelPhatAudioProcessorEditor::PassbandVisualizer::paint(juce::Graphics& g)
 {
-    auto bounds = getLocalBounds().toFloat().reduced(2.0f);
+    auto bounds = getLocalBounds().toFloat();
+    const float trackTop = bounds.getY() + 4.0f;
+    const float trackBottom = bounds.getBottom() - 4.0f;
+    const float trackHeight = std::max(1.0f, trackBottom - trackTop);
+
+    auto bgRect = juce::Rectangle<float>(bounds.getX(), trackTop, bounds.getWidth(), trackHeight);
+
     g.setColour(camelphat::ui::CamelPhatLookAndFeel::trackBg);
-    g.fillRoundedRectangle(bounds, 4.0f);
+    g.fillRoundedRectangle(bgRect, 3.0f);
     g.setColour(camelphat::ui::CamelPhatLookAndFeel::cardBorder);
-    g.drawRoundedRectangle(bounds, 4.0f, 1.0f);
+    g.drawRoundedRectangle(bgRect, 3.0f, 1.0f);
 
     // Compute slider relative thumb positions using exact proportion of length
     const float lowProp = static_cast<float>(lowSlider.valueToProportionOfLength(lowSlider.getValue()));
     const float highProp = static_cast<float>(highSlider.valueToProportionOfLength(highSlider.getValue()));
 
-    const float yLow = bounds.getBottom() - lowProp * bounds.getHeight();
-    const float yHigh = bounds.getBottom() - highProp * bounds.getHeight();
+    const float yLow = trackBottom - lowProp * trackHeight;
+    const float yHigh = trackBottom - highProp * trackHeight;
 
     const float passTop = std::min(yLow, yHigh);
     const float passBottom = std::max(yLow, yHigh);
 
     if (passBottom - passTop > 1.0f)
     {
-        auto passRect = juce::Rectangle<float>(bounds.getX() + 2.0f, passTop,
-                                               bounds.getWidth() - 4.0f, passBottom - passTop);
+        auto passRect = juce::Rectangle<float>(bgRect.getX() + 1.0f, passTop,
+                                               bgRect.getWidth() - 2.0f, passBottom - passTop);
         g.setColour(camelphat::ui::CamelPhatLookAndFeel::neonCyan.withAlpha(0.28f));
         g.fillRoundedRectangle(passRect, 2.0f);
     }
@@ -701,7 +707,11 @@ void CamelPhatAudioProcessorEditor::resized()
     bpHighCutSlider.setBounds(s2.reduced(10, 0));
 
     if (bpPassband != nullptr)
-        bpPassband->setBounds(bpSliderArea.reduced(2, 4));
+    {
+        auto sBounds = bpLowCutSlider.getBounds();
+        bpPassband->setBounds(bpSliderArea.getX() + 2, sBounds.getY(),
+                              bpSliderArea.getWidth() - 4, sBounds.getHeight());
+    }
 
     bpInner.removeFromTop(6);
 

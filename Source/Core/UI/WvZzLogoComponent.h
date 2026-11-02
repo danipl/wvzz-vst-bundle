@@ -51,13 +51,11 @@ public:
 
         // 2. Draw geometric WvZz waveform / lightning monogram vector path
         juce::Path emblem;
-        // Stylized geometric W pulse that transitions into a Z zigzag
         const float bx = emblemX + 4.0f * scale;
         const float by = emblemY + 5.0f * scale;
         const float bw = emblemSize - 8.0f * scale;
         const float bh = emblemSize - 10.0f * scale;
 
-        // Waveform/W-Z path
         emblem.startNewSubPath(bx, by + bh * 0.2f);
         emblem.lineTo(bx + bw * 0.22f, by + bh * 0.85f);  // First W drop
         emblem.lineTo(bx + bw * 0.42f, by + bh * 0.35f);  // W mid peak
@@ -67,33 +65,35 @@ public:
         emblem.lineTo(bx + bw * 0.65f, by + bh * 0.85f);  // Z diagonal
         emblem.lineTo(bx + bw,         by + bh * 0.85f);  // Z bottom bar
 
-        // Draw emblem stroke with neon cyan/green gradient
         juce::ColourGradient grad(WvZzLookAndFeel::neonCyan, bx, by,
                                   WvZzLookAndFeel::neonGreen, bx + bw, by + bh, false);
         g.setGradientFill(grad);
         g.strokePath(emblem, juce::PathStrokeType(2.2f * scale, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
         // 3. Draw Brand Typography: "WvZz"
-        const float textX = emblemX + emblemSize + 8.0f * scale;
-        const float brandFontSize = 18.0f * scale;
-        g.setFont(juce::FontOptions(brandFontSize, juce::Font::bold));
+        const float textX = emblemX + emblemSize + 10.0f * scale;
+        const float brandFontSize = 20.0f * scale;
+        juce::Font brandFont(juce::FontOptions(brandFontSize, juce::Font::bold));
+        g.setFont(brandFont);
         g.setColour(WvZzLookAndFeel::textPrimary);
 
-        auto brandArea = juce::Rectangle<float>(textX, bounds.getY() + 2.0f * scale, 64.0f * scale, brandFontSize + 2.0f * scale);
+        const float brandW = brandFont.getStringWidth("WvZz");
+        auto brandArea = juce::Rectangle<float>(textX, bounds.getY(), brandW, bounds.getHeight());
         g.drawText("WvZz", brandArea, juce::Justification::centredLeft, false);
 
         // 4. Draw Subtitle Badge (e.g. "DISTORTION")
         if (subtitle.isNotEmpty())
         {
-            const float subX = textX + 54.0f * scale;
-            const float subY = bounds.getY() + 7.0f * scale;
-            const float subFontSize = 8.5f * scale;
-            const float subPadX = 5.0f * scale;
-            const float subPadY = 2.0f * scale;
+            const float subFontSize = 9.0f * scale;
+            const float subPadX = 6.0f * scale;
+            const float subPadY = 3.0f * scale;
 
             juce::Font subFont(juce::FontOptions(subFontSize, juce::Font::bold));
             const float textW = subFont.getStringWidth(subtitle) + subPadX * 2.0f;
             const float textH = subFontSize + subPadY * 2.0f;
+
+            const float subX = textX + brandW + 10.0f * scale;
+            const float subY = bounds.getCentreY() - textH * 0.5f;
 
             auto subRect = juce::Rectangle<float>(subX, subY, textW, textH);
             g.setColour(WvZzLookAndFeel::neonAmber.withAlpha(0.18f));

@@ -43,7 +43,7 @@ CompressorView::CompressorView(juce::AudioProcessorValueTreeState& apvts,
     : apvtsState(apvts),
       instancePrefix(prefix),
       meter(meterSource),
-      card("Compressor", ui::WvZzLookAndFeel::neonGreen)
+      card("COMPRESSOR", ui::WvZzLookAndFeel::neonGreen)
 {
     addAndMakeVisible(card);
 
@@ -121,31 +121,23 @@ void CompressorView::resized()
         helpButton->setBounds(card.getHeaderHelpBounds());
 
     auto content = card.getContentBounds();
-    const int meterW = 20;
-    const int meterH = content.getHeight() - 10;
-    const int meterX = content.getX() + 6;
-    const int meterY = content.getY() + 4;
-    grMeter->setBounds(meterX, meterY, meterW, meterH);
 
-    auto controlsArea = content.withTrimmedLeft(meterW + 12);
-    const int colW = controlsArea.getWidth() / 3;
-    const int knobSize = 46;
-    const int ky = controlsArea.getY() + (controlsArea.getHeight() - (knobSize + 16)) / 2;
+    auto compTop = content.removeFromTop(20);
+    phatToggle.button.setBounds(compTop.removeFromRight(50).reduced(0, 1));
 
-    auto placeKnob = [&](RotaryControl& rc, int col) {
-        int cx = controlsArea.getX() + col * colW + (colW - knobSize) / 2;
-        rc.slider.setBounds(cx, ky, knobSize, knobSize);
-        rc.label.setBounds(controlsArea.getX() + col * colW, ky + knobSize + 2, colW, 14);
+    if (grMeter != nullptr)
+        grMeter->setBounds(content.removeFromRight(32).reduced(2, 4));
+
+    auto layoutKnob = [](RotaryControl& rc, juce::Rectangle<int> r) {
+        int labelH = 14;
+        auto knobArea = r.reduced(1);
+        rc.label.setBounds(knobArea.removeFromBottom(labelH));
+        rc.slider.setBounds(knobArea);
     };
 
-    placeKnob(amountKnob, 0);
-    placeKnob(releaseKnob, 1);
-
-    const int btnW = 44;
-    const int btnH = 22;
-    const int bx = controlsArea.getX() + 2 * colW + (colW - btnW) / 2;
-    const int by = controlsArea.getY() + (controlsArea.getHeight() - btnH) / 2;
-    phatToggle.button.setBounds(bx, by, btnW, btnH);
+    int compKw = content.getWidth() / 2;
+    layoutKnob(amountKnob, content.removeFromLeft(compKw));
+    layoutKnob(releaseKnob, content);
 }
 
 } // namespace wvzz::modules

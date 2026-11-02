@@ -31,7 +31,7 @@ public:
         juce::AudioProcessorValueTreeState& apvts,
         ui::IHelpOverlayHost* helpHost = nullptr) override
     {
-        return std::make_unique<MasterView>(apvts, instancePrefix, &dsp, helpHost);
+        return std::make_unique<MasterView>(apvts, instancePrefix, &dsp, &dsp.getInputMeterSource(), helpHost);
     }
 
 private:
