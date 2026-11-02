@@ -1,37 +1,34 @@
-# CamelPhat 3 (JUCE 8 / C++20)
+# WvZz Modular Audio Plugin Bundle (JUCE 8 / C++20)
 
-> A high-performance, zero-allocation multi-effect sound-shaping plugin faithfully recreating the signal chain, DSP behavior, and modulation architecture of **Camel Audio CamelPhat 3** for modern 64-bit DAWs.
+> A modern, modular, high-performance audio plugin suite built on SOLID architectural principles. Powered by zero-allocation DSP modules, resolution-independent vector UI, and a unified real-time routing pipeline.
 
-Available for **macOS** (Universal Binary `arm64` & `x86_64`) as **VST3**, **Audio Unit (AU v2)**, and **Standalone** application.
-
----
-
-## Highlights
-
-- **Zero-Allocation Audio Thread:** Strictly 0 heap allocations (`malloc`/`new`) inside `processBlock()`, verified under headless unit tests across continuous audio rendering blocks.
-- **4x Oversampling Engine:** 4x polyphase IIR oversampling with latency compensation on the global dry signal path to eliminate digital aliasing while maintaining phase alignment.
-- **7 Core DSP Stages:**
-  - **BP Filter (Bandpass & Band-Reject Split):** Andy Simper Cytomic ZDF State Variable Filters with Low/High cut link and band-reject extraction.
-  - **4-Stage Parallel Distortion:** Mech (1.2 kHz pre-emphasis with sine wavefolding), Tube (analog saturation with DC blocker), Bitcrusher (base sample rate decimation), and Xcita (2.8 kHz HPF with full-wave rectification).
-  - **12-Mode Multi-Mode Filter:** 12 filter topologies (`LP 12/24dB`, `BP 12/24dB`, `HP 12/24dB`, `Notch`, `Peak`, `Comb +`, `Comb -`, `RingMod`, and `Vowel / Formant` morphing across `A-E-I-O-U`) with pre-BP envelope follower modulation.
-  - **Stereo Flanger:** 3rd-order Lagrange fractional delay interpolation with 90° quadrature stereo LFO and fixed 0.55 feedback.
-  - **Magic EQ:** Resonant sub-bass peaking booster (60-120 Hz) with complimentary anti-mud dip at 2 * tune, and Phat Mode with internal resonant saturation.
-  - **One-Knob Compressor:** Auto-makeup gain and dual ballistics (Normal 3.5:1 leveling vs Phat 12:1 smash with -0.1 dBFS ceiling).
-  - **Master Section:** Dry latency compensation, output volume trim (-36 to +12 dB), Dice smart randomizer, and 60 FPS animated VU meters.
-- **Modulation System:**
-  - **LFO 1 & LFO 2:** Control-rate modulation with 7 waveforms (Sine, Triangle, Saw Down, Saw Up, Square, S&H, Smooth Random), Free and Host Tempo Sync.
-  - **21-Target Matrix:** Cross-modulation of LFO 2 Rate by LFO 1, BP Both Cuts, and individual module parameters.
-  - **Macro X/Y Pad:** 2D interactive vector surface with assignable targets and depth controls.
-- **10 Factory Presets:** Included built-in presets covering classic bass mangling, breakbeat smashing, and lo-fi textures.
-- **Contextual Help System:** In-plugin plain-language explanation cards accessible via **`?`** buttons on every module.
+Flagship release: **WvZz Distortion** for **macOS** (Universal Binary `arm64` & `x86_64`) as **VST3** and **Standalone** application.
 
 ---
 
-## Documentation & User Guide
+## Architecture & SOLID Principles
 
-For detailed compilation instructions, DAW setup (Ableton Live, Logic Pro, Reaper), and an in-depth module-by-module breakdown, please refer to the complete manual:
+The repository is organized into a reusable static library `WvZzModules` and standalone plugin targets (`Plugins/WvZzDistortion/`):
 
-👉 **[Read the Full User & Developer Manual (MANUAL.md)](MANUAL.md)**
+- **Single Responsibility (SRP):** Headless DSP engines (`IDSPModule`), parameter declarations/smoothing, and GUI presentations (`IModuleView`) are decoupled into isolated classes.
+- **Open/Closed (OCP):** New audio modules and multi-instance module chains (e.g., dual distortion stages) can be plugged in without modifying host plugin code or shared routing logic.
+- **Liskov Substitution (LSP):** All audio modules implement `IPluginModule` and can be instantiated, bound to APVTS, and managed polymorphically.
+- **Interface Segregation (ISP):** Distinct interfaces for real-time DSP (`IDSPModule`), visual telemetry (`IMeterSource`), and editor view creation (`IModuleView`).
+- **Dependency Inversion (DIP):** Modules communicate through a pre-allocated `ProcessContext` passing audio buffers and control-rate modulation offsets. Zero direct coupling between audio processing stages.
+- **Multi-Instance Capability:** Every module accepts a configurable `instancePrefix` (e.g. `slot1_dist_`, `slot2_dist_`) enabling stacking identical modules without parameter ID collisions.
+
+---
+
+## Modules Overview
+
+1. **BPFilter (`Source/Modules/BPFilter/`):** Andy Simper Cytomic ZDF State Variable Filters with low/high cut linking, band-reject energy extraction into auxiliary buffers, and post-MMFilter recombination.
+2. **Distortion (`Source/Modules/Distortion/`):** 4 parallel saturation circuits (Mech, Tube, Bitcrusher, Xcita) running through a 4x oversampling polyphase IIR pipeline with DC blocker.
+3. **MMFilter (`Source/Modules/MMFilter/`):** 12 filter topologies (`LP 12/24dB`, `BP 12/24dB`, `HP 12/24dB`, `Notch`, `Peak`, `Comb +`, `Comb -`, `RingMod`, and `Vowel / Formant` morphing across `A-E-I-O-U`) with envelope follower sidechain modulation.
+4. **Flanger (`Source/Modules/Flanger/`):** 3rd-order Lagrange fractional delay interpolation with 90° quadrature stereo LFO and feedback.
+5. **MagicEQ (`Source/Modules/MagicEQ/`):** Resonant sub-bass peaking booster (60–120 Hz) with complementary anti-mud dip at 2 * tune and Phat saturation mode.
+6. **Compressor (`Source/Modules/Compressor/`):** One-knob dynamic leveling with auto-makeup gain, dual ballistics (Normal 3.5:1 vs Phat 12:1 smash), and gain reduction telemetry.
+7. **Modulation (`Source/Modules/Modulation/`):** Dual LFOs with 7 waveforms (Free and Host Tempo Sync), Macro X/Y Pad, and 21-target control-rate modulation delivery.
+8. **Master (`Source/Modules/Master/`):** Input gain stage, dry circular delay line latency compensation matching distortion oversampling, wet/dry blend, output volume trim (-36 to +12 dB), peak/RMS metering, and safety hard clipper.
 
 ---
 
@@ -40,22 +37,29 @@ For detailed compilation instructions, DAW setup (Ableton Live, Logic Pro, Reape
 A [`Makefile`](Makefile) is provided in the repository root for one-command builds and installation:
 
 ```bash
-# 1. Build the .vst3 bundle and install to ~/Library/Audio/Plug-Ins/VST3/
+# 1. Build and install WvZz Distortion VST3 to ~/Library/Audio/Plug-Ins/VST3/
 make install-vst3
 
-# Or build and install both VST3 and AU bundles:
-make install
+# 2. Build Standalone desktop application:
+make standalone
 
-# Or install VST3 system-wide to /Library/Audio/Plug-Ins/VST3/ (requires sudo):
-make install-system
-
-# Run tests:
+# 3. Run zero-allocation DSP test suite:
 make test
+
+# 4. View available targets:
+make help
 ```
+
+---
+
+## User Manual & Documentation
+
+For detailed architecture descriptions, module parameters, and DAW setup instructions, refer to:
+
+👉 **[Read the Full User Manual (MANUAL.md)](MANUAL.md)**
 
 ---
 
 ## License
 
-This project is created for educational and music production purposes.
-All trademarks and product names belong to their respective owners.
+This project is created for music production and educational purposes under the WvZz brand.

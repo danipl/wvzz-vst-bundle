@@ -1,9 +1,17 @@
-build/
+# Operating System
 .DS_Store
-*.xcuserdata
-DerivedData/
-.idea
-.claude
-skills/
-cmake-build-debug
+._*
 
+# Build & Compilation Artifacts
+build/
+cmake-build-*/
+DerivedData/
+
+# IDEs & Developer Tools
+.idea/
+*.xcuserdata
+*.xcscmblueprint
+.vscode/
+
+# AI Agents & Local Configurations
+/skills/
