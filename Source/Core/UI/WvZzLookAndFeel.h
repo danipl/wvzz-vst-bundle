@@ -1,0 +1,66 @@
+#pragma once
+
+#include <juce_gui_basics/juce_gui_basics.h>
+
+namespace wvzz::ui {
+
+/**
+ * @brief Modern vector LookAndFeel for WvZz plugin bundle.
+ * Renders sleek neon/dark themed rotary dials, illuminated buttons, and combo boxes.
+ */
+class WvZzLookAndFeel : public juce::LookAndFeel_V4
+{
+public:
+    WvZzLookAndFeel();
+    ~WvZzLookAndFeel() override = default;
+
+    void drawRotarySlider(juce::Graphics& g,
+                          int x, int y, int width, int height,
+                          float sliderPosProportional,
+                          float rotaryStartAngle,
+                          float rotaryEndAngle,
+                          juce::Slider& slider) override;
+
+    void drawLinearSlider(juce::Graphics& g,
+                          int x, int y, int width, int height,
+                          float sliderPos,
+                          float minSliderPos,
+                          float maxSliderPos,
+                          juce::Slider::SliderStyle style,
+                          juce::Slider& slider) override;
+
+    void drawToggleButton(juce::Graphics& g,
+                          juce::ToggleButton& button,
+                          bool shouldDrawButtonAsHighlighted,
+                          bool shouldDrawButtonAsDown) override;
+
+    void drawButtonBackground(juce::Graphics& g,
+                              juce::Button& button,
+                              const juce::Colour& backgroundColour,
+                              bool shouldDrawButtonAsHighlighted,
+                              bool shouldDrawButtonAsDown) override;
+
+    void drawComboBox(juce::Graphics& g,
+                      int width, int height,
+                      bool isButtonDown,
+                      int buttonX, int buttonY, int buttonW, int buttonH,
+                      juce::ComboBox& box) override;
+
+    void drawPopupMenuBackground(juce::Graphics& g, int width, int height) override;
+
+    // Palette Colors
+    static const juce::Colour bgBase;
+    static const juce::Colour cardBg;
+    static const juce::Colour cardBorder;
+    static const juce::Colour neonGreen;
+    static const juce::Colour neonAmber;
+    static const juce::Colour neonCyan;
+    static const juce::Colour trackBg;
+    static const juce::Colour textPrimary;
+    static const juce::Colour textSecondary;
+};
+
+// Backward-compatibility alias
+using CamelPhatLookAndFeel = WvZzLookAndFeel;
+
+} // namespace wvzz::ui

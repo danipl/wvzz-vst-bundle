@@ -1,0 +1,38 @@
+name: Audio Module Request
+description: Propose a new DSP audio module adhering to WvZz SOLID architecture
+title: "[MODULE]: "
+labels: ["module-proposal", "enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Propose a new audio module to be added to `Source/Modules/` and linked by `WvZzModules`.
+  - type: input
+    id: module_name
+    attributes:
+      label: Module Name & Proposed Prefix
+      description: E.g., Frequency Shifter (`fshift`), Transient Shaper (`trans`)
+      placeholder: Frequency Shifter (fshift)
+    validations:
+      required: true
+  - type: textarea
+    id: dsp_design
+    attributes:
+      label: DSP & Mathematical Design
+      description: Explain the underlying algorithm, filters, transfer function, or DSP topologies.
+    validations:
+      required: true
+  - type: textarea
+    id: parameters
+    attributes:
+      label: Parameters & Ranges
+      description: List target parameters, standard ranges, units, and default values.
+    validations:
+      required: true
+  - type: textarea
+    id: routing
+    attributes:
+      label: ProcessContext Routing & Modulation
+      description: How should this module interact with `ProcessContext` (main buffer, sidechain, auxiliary buses, modulation targets)?
+    validations:
+      required: true

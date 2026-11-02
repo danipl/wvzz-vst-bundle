@@ -1,32 +1,14 @@
 schema: spec-driven
 
-# Project context (optional)
-# Add only constraints that should guide OpenSpec artifacts and workflows.
-# Include constraints an agent cannot infer by reading the code.
-# Keep general project documentation and discoverable codebase facts out.
-# Example:
-#   context: |
-#     Designs and tasks must cover Windows, macOS, and Linux
-#     Write all artifacts in Spanish
-
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always state what is out of scope
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
-
-# Per-operation guidance (optional)
-# Add advisory guidance for how apply and archive work should be conducted.
-# This is separate from artifact rules above.
-# Example:
-#   operations:
-#     apply:
-#       guidance:
-#         - Keep test summaries concise
-#     archive:
-#       guidance:
-#         - Summarize the archive outcome before finishing
+context: |
+  Brand & Architecture Constraints:
+  - Brand: WvZz (Company: "WvZz", Manufacturer Code: WvZz, Root C++ namespace: wvzz, UI namespace: wvzz::ui).
+  - Target formats: Strictly macOS Universal Binary (arm64;x86_64) VST3 and Standalone formats. AU is not supported.
+  - SOLID Principles:
+    - Single Responsibility (SRP): Decouple headless real-time DSP (IDSPModule), parameter smoothing, and GUI presentation (IModuleView).
+    - Open/Closed (OCP): New modules and multi-instance module slots must plug in without altering host audio engine core.
+    - Liskov Substitution (LSP): All modules implement IPluginModule and can be managed polymorphically.
+    - Interface Segregation (ISP): Separate audio processing, metering, and view generation.
+    - Dependency Inversion (DIP): Modules interact with host routing and modulation exclusively via pre-allocated ProcessContext.
+  - Real-time Audio Guarantees: Zero heap allocations, zero locks, and noexcept in all process callbacks.
+  - Parameter IDs: All modules support configurable instancePrefix (defaulting to canonical prefixes like "dist", "bp", etc.).

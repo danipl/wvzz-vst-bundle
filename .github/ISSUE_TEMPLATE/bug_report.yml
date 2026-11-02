@@ -1,0 +1,68 @@
+name: Bug Report
+description: File a bug report for WvZz plugins or modules
+title: "[BUG]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting an issue in the WvZz Audio Plugin Bundle!
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected Component
+      description: Which plugin or module is affected?
+      options:
+        - WvZz Distortion (Flagship VST3/Standalone)
+        - BPFilter Module
+        - Distortion Module
+        - MMFilter Module
+        - Flanger Module
+        - MagicEQ Module
+        - Compressor Module
+        - Modulation Module / XY Pad
+        - Master Module
+        - Build System (CMake / Make)
+    validations:
+      required: true
+  - type: input
+    id: os_version
+    attributes:
+      label: macOS Version & Architecture
+      description: E.g., macOS 14.4 Sonoma, Apple Silicon M2 (arm64) or Intel (x86_64)
+      placeholder: macOS 14.x (arm64)
+    validations:
+      required: true
+  - type: input
+    id: daw
+    attributes:
+      label: Host DAW / Environment
+      description: E.g., Ableton Live 12, Logic Pro 11, REAPER 7, Standalone app
+      placeholder: Ableton Live 12.0.5 VST3
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the Bug
+      description: Clear and concise description of the issue.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce this?
+      value: |
+        1. Insert 'WvZz Distortion' on a stereo track
+        2. Set parameter ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What should happen instead?
+    validations:
+      required: true

@@ -1,0 +1,30 @@
+name: Plugin Idea
+description: Propose a new complete plugin target composed from WvZz modules
+title: "[PLUGIN]: "
+labels: ["plugin-proposal"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Propose a new target plugin to be added under `Plugins/` (e.g. WvZz FilterBank, WvZz Multi-Band).
+  - type: input
+    id: plugin_name
+    attributes:
+      label: Plugin Name & Concept
+      placeholder: WvZz FilterBank
+    validations:
+      required: true
+  - type: textarea
+    id: modules_used
+    attributes:
+      label: Composed Modules
+      description: Which modules from `Source/Modules/` will be composed, and in what signal flow?
+    validations:
+      required: true
+  - type: textarea
+    id: layout
+    attributes:
+      label: UI / UX Layout Concept
+      description: Describe header, columns, and view hierarchy.
+    validations:
+      required: true
