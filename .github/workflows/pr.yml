@@ -1,0 +1,136 @@
+name: PR
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  conventional:
+    name: Conventional Commits
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Lint commit messages and PR title
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+          re='^(fix|feat|docs|refactor|test|ci|chore|revert)(\([^)]+\))?!?: .+'
+          if [ "$EVENT" = pull_request ]; then
+            range="$PR_BASE..$PR_HEAD"
+          else
+            # push to main; fall back to HEAD alone on force-push/branch start
+            range="$PUSH_BEFORE..$GITHUB_SHA"
+            git merge-base --is-ancestor "$PUSH_BEFORE" "$GITHUB_SHA" 2>/dev/null || range="$GITHUB_SHA^..$GITHUB_SHA"
+          fi
+          fail=0
+          while read -r sha subject; do
+            if ! echo "$subject" | grep -Eq "$re"; then
+              echo "::error::commit $sha ('$subject') is not Conventional Commits. Expected '<type>[optional scope][!]: <description>' with type in fix|feat|docs|refactor|test|ci|chore|revert. fix=patch, feat=minor, feat!/BREAKING CHANGE=major, others=no release."
+              fail=1
+            fi
+          # squash-only repo: merge commits (e.g. "Update branch") never reach main
+          done < <(git log --no-merges --format='%h %s' "$range")
+          if [ "$EVENT" = pull_request ]; then
+            # squash "Keep PR title only" makes the title the commit on main
+            if ! echo "$PR_TITLE" | grep -Eq "$re"; then
+              echo "::error::PR title ('$PR_TITLE') is not Conventional Commits. On squash-merge it becomes the main commit message and drives the version bump. Same pattern as above."
+              fail=1
+            fi
+          fi
+          exit $fail
+
+  openspec:
+    name: OpenSpec Archive & Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify zero unarchived OpenSpec changes
+        run: |
+          set -euo pipefail
+          mkdir -p openspec/changes/archive
+          # List all directories under openspec/changes excluding archive
+          unarchived=()
+          for item in openspec/changes/*; do
+            [ -d "$item" ] || continue
+            basename="$(basename "$item")"
+            if [ "$basename" != "archive" ]; then
+              unarchived+=("$basename")
+            fi
+          done
+
+          if [ ${#unarchived[@]} -gt 0 ]; then
+            echo "::error::Found unarchived OpenSpec changes on PR targeting main: ${unarchived[*]}"
+            echo "::error::Run 'openspec archive <change-name>' before merging to main."
+            exit 1
+          fi
+          echo "OpenSpec changes directory clean (all changes archived)."
+      - name: Validate all OpenSpec specs
+        run: |
+          npx --yes @fission-ai/openspec@latest validate --all
+
+  build-and-test:
+    name: macOS Universal Build & Tests
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Ninja
+        run: brew install ninja
+      - name: Cache JUCE FetchContent
+        uses: actions/cache@v4
+        with:
+          path: build/_deps/juce-src
+          key: juce-8.0.4-${{ runner.os }}
+      - name: Configure CMake
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET="11.0"
+      - name: Build all targets
+        run: cmake --build build --config Release
+      - name: Run headless DSP tests
+        run: ctest --test-dir build --output-on-failure
+      - name: Verify Universal Binary architectures and ad-hoc signatures
+        run: |
+          set -euo pipefail
+          echo "=== Verifying VST3 Bundles ==="
+          find build -type d -path '*/Release/VST3/*.vst3' | while read -r vst3; do
+            echo "Checking $vst3"
+            codesign --verify --deep --strict "$vst3"
+            name="$(basename "$vst3")"
+            binary="$vst3/Contents/MacOS/${name%.vst3}"
+            if [ -f "$binary" ]; then
+              archs="$(lipo -archs "$binary")"
+              echo "Mach-O architectures: $archs"
+              echo "$archs" | grep -q "arm64"
+              echo "$archs" | grep -q "x86_64"
+            fi
+          done
+
+          echo "=== Verifying Standalone Applications ==="
+          find build -type d -path '*/Release/Standalone/*.app' | while read -r app; do
+            echo "Checking $app"
+            codesign --verify --deep --strict "$app"
+            name="$(basename "$app")"
+            binary="$app/Contents/MacOS/${name%.app}"
+            if [ -f "$binary" ]; then
+              archs="$(lipo -archs "$binary")"
+              echo "Mach-O architectures: $archs"
+              echo "$archs" | grep -q "arm64"
+              echo "$archs" | grep -q "x86_64"
+            fi
+          done
