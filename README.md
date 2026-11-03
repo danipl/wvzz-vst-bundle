@@ -9,6 +9,7 @@
 **Open-source, modular VST3 & Standalone audio plugin bundle crafted in modern C++20 and JUCE 8.**  
 *Zero-allocation real-time audio • Cytomic ZDF Analog Modeling • Resolution-independent Vector UI*
 
+[![latest release](https://img.shields.io/badge/latest%20release-v0.1.0-e879f9?style=for-the-badge&logo=github&logoColor=white)](https://github.com/danipl/wvzz-vst-bundle/releases/latest) <!-- x-release-please-version -->
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C?style=for-the-badge&logo=c%2B%2B&logoColor=white)](https://en.cppreference.com/w/cpp/20)
 [![JUCE 8](https://img.shields.io/badge/JUCE-8.0-00e676?style=for-the-badge)](https://juce.com/)
 [![Platform](https://img.shields.io/badge/macOS-Universal%20Binary%20(arm64%20%7C%20x86__64)-12161a?style=for-the-badge&logo=apple&logoColor=white)](#)
@@ -191,6 +192,17 @@ To keep the bundle studio-ready and reliable for everyone, please ensure your co
 1. **Fork** the repository and create your feature branch (`git checkout -b feat/amazing-dsp-module`).
 2. **Build & Test** locally using `make build && make test`.
 3. **Commit** your changes with clear messages and open a **Pull Request**—we're excited to review and jam on your ideas!
+
+---
+
+## 🚀 Releasing & CI/CD
+
+Release management is automated with **release-please**, GitHub Actions, and **OpenSpec**:
+- **Conventional Commits**: The commit prefix drives version increments (`fix:` -> patch, `feat:` -> minor, `BREAKING CHANGE:` -> major).
+- **OpenSpec Gate**: All changes in `openspec/changes/` must be archived prior to merging into `main`.
+- **Automated Bundling**: Merging a release pull request builds macOS Universal Binaries (`arm64;x86_64`) for all VST3 and Standalone plugins and attaches format-split `.zip` archives to the GitHub Release.
+
+For architecture and workflow details, see [CI/CD Documentation](docs/CICD.md).
 
 ---
 

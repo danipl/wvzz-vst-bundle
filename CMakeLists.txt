@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(WvZzBundle VERSION 3.0.0 LANGUAGES C CXX)
+project(WvZzBundle VERSION 0.1.0 LANGUAGES C CXX) # x-release-please-version
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -164,12 +164,20 @@ target_link_libraries(WvZzDistortion
         juce::juce_recommended_warning_flags
 )
 
-if(APPLE AND TARGET WvZzDistortion_VST3)
-    # Re-apply ad-hoc signature after juce_vst3_helper generates moduleinfo.json
-    add_custom_command(TARGET WvZzDistortion_VST3 POST_BUILD
-        COMMAND codesign --force --deep -s - "$<TARGET_BUNDLE_DIR:WvZzDistortion_VST3>"
-        COMMENT "Re-signing VST3 bundle after moduleinfo.json generation"
-    )
+if(APPLE)
+    if(TARGET WvZzDistortion_VST3)
+        # Re-apply ad-hoc signature after juce_vst3_helper generates moduleinfo.json
+        add_custom_command(TARGET WvZzDistortion_VST3 POST_BUILD
+            COMMAND codesign --force --deep -s - "$<TARGET_BUNDLE_DIR:WvZzDistortion_VST3>"
+            COMMENT "Re-signing VST3 bundle after moduleinfo.json generation"
+        )
+    endif()
+    if(TARGET WvZzDistortion_Standalone)
+        add_custom_command(TARGET WvZzDistortion_Standalone POST_BUILD
+            COMMAND codesign --force --deep -s - "$<TARGET_BUNDLE_DIR:WvZzDistortion_Standalone>"
+            COMMENT "Signing Standalone app bundle"
+        )
+    endif()
 endif()
 
 # ==============================================================================
