@@ -9,7 +9,7 @@
 **Open-source, modular VST3 & Standalone audio plugin bundle crafted in modern C++20 and JUCE 8.**  
 *Zero-allocation real-time audio • Cytomic ZDF Analog Modeling • Resolution-independent Vector UI*
 
-[![latest release](https://img.shields.io/badge/latest%20release-v0.1.0-e879f9?style=for-the-badge&logo=github&logoColor=white)](https://github.com/danipl/wvzz-vst-bundle/releases/latest) <!-- x-release-please-version -->
+[![latest release](https://img.shields.io/badge/latest%20release-v0.2.0?style=for-the-badge&logo=github&logoColor=white)](https://github.com/danipl/wvzz-vst-bundle/releases/latest) <!-- x-release-please-version -->
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C?style=for-the-badge&logo=c%2B%2B&logoColor=white)](https://en.cppreference.com/w/cpp/20)
 [![JUCE 8](https://img.shields.io/badge/JUCE-8.0-00e676?style=for-the-badge)](https://juce.com/)
 [![Platform](https://img.shields.io/badge/macOS-Universal%20Binary%20(arm64%20%7C%20x86__64)-12161a?style=for-the-badge&logo=apple&logoColor=white)](#)
