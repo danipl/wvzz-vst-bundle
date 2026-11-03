@@ -87,7 +87,7 @@ private:
     // Center Tab Bar in header
     juce::TextButton xyTabButton { "X/Y PAD" };
     juce::TextButton monitorTabButton { "MONITOR" };
-    bool isMonitorActive { false };
+    bool isMonitorActive { true };
 
     // Upper views
     std::unique_ptr<ui::XYPadComponent> xyPad;

@@ -144,7 +144,7 @@ ModulationView::ModulationView(juce::AudioProcessorValueTreeState& apvts,
     initRotary(lfo2RateKnob, "lfo2_rate", "Rate", false, ui::WvZzLookAndFeel::neonGreen);
     initRotary(lfo2DepthKnob, "lfo2_depth", "Depth", true, ui::WvZzLookAndFeel::neonGreen);
 
-    setCenterTab(false);
+    setCenterTab(true);
 }
 
 void ModulationView::initToggle(ToggleControl& tc, const juce::String& paramId, const juce::String& text,
