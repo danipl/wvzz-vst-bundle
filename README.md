@@ -166,6 +166,8 @@ Whether you are a music producer looking to sculpt your mix or an audio programm
 | **[WvZz Distortion — Plugin Description](Plugins/WvZzDistortion/README.md)** | Producers & Engineers | Deep dive into **what** the plugin does, **why** it avoids mud/aliasing, and **how** its DSP signal flow operates. |
 | **[WvZz Distortion — User Manual](Plugins/WvZzDistortion/USER_MANUAL.md)** | Producers & Musicians | 60-second quick start, UI map, complete parameter reference tables, 12 filter modes, 10 factory presets, and DAW gain-staging tips. |
 | **[Bundle Developer & Build Manual](MANUAL.md)** | Audio Developers | System requirements, CMake/Ninja build internals, SOLID interface contracts (`IPluginModule`), and test harness details. |
+| **[AI Agent & Contributor Operating Guide](AGENTS.md)** | AI Agents & Contributors | Mandatory OpenSpec lifecycle, branch naming, Conventional Commits, C++20/JUCE real-time invariants, and anti-AI-slop standards. |
+| **[CI/CD & Release Architecture](docs/CICD.md)** | Contributors & DevOps | release-please workflows, multi-plugin Universal Binary bundling, and GitHub Actions gates. |
 
 ---
 
@@ -182,16 +184,22 @@ Whether you want to design factory presets, propose a new filter topology, build
 - **🐛 Bug Reports & QA:** Report audio glitches, edge-case host behaviors, or platform build issues via GitHub Issues.
 
 ### Engineering Standards for Pull Requests:
-To keep the bundle studio-ready and reliable for everyone, please ensure your code adheres to our core principles:
-1. **Real-Time Audio Safety First:** Never allocate heap memory (`new`, `malloc`, `std::vector::push_back`), lock mutexes, or perform I/O inside `process()` or `processBlock()`.
-2. **Respect SOLID Boundaries:** Keep headless DSP math (`IDSPModule`) strictly separated from GUI components (`IModuleView`) so all modules remain testable in CLI environments.
-3. **Support Multi-Instance Prefixing:** Prefix all APVTS parameter IDs with `instancePrefix` so modules can be chained multiple times in future plugins.
-4. **Verify with Tests:** Run `make test` before submitting your PR and add quantitative unit tests in [`Tests/DSPTests.cpp`](Tests/DSPTests.cpp) for new DSP behaviors.
+To keep the bundle studio-ready and reliable for everyone, all pull requests (whether authored by humans or AI coding agents) must adhere to our core standards:
+1. **Follow the OpenSpec Workflow:** All non-trivial changes must progress through OpenSpec from discovery (`/opsx-explore`) and proposal (`/opsx-propose`) to implementation (`/opsx-apply`), and must be **archived** (`openspec archive <change-id>`) before merging to `main`.
+2. **Branching & Commit Discipline:** Always create your working branch from an up-to-date `main` using our branch naming convention (`<type>/<kebab-case-description>`, e.g. `feat/delay-module` or `fix/filter-dc-offset`). All commit messages and the **PR Title** must follow [Conventional Commits](https://www.conventionalcommits.org/) to drive automated semantic releases via `release-please`.
+3. **Real-Time Audio Safety First:** Never allocate heap memory (`new`, `malloc`, `std::vector::push_back`, `juce::String`), lock mutexes, or perform I/O inside `process()` or `processBlock()`. All audio processing methods must be strictly `noexcept`.
+4. **Respect SOLID Boundaries:** Keep headless DSP math (`IDSPModule`) strictly separated from GUI components (`IModuleView`) so all modules remain testable in CLI environments. Never include GUI headers in DSP code.
+5. **Support Multi-Instance Prefixing:** Prefix all APVTS parameter IDs with `instancePrefix` so modules can be chained multiple times in future plugins.
+6. **Verify with Tests & Packaging:** Run `make test` before submitting your PR, add quantitative unit tests in [`Tests/DSPTests.cpp`](Tests/DSPTests.cpp) for new DSP behaviors, and verify Universal Binary packaging via `make package`.
+7. **Strict PR Template & No AI Slop:** Every PR must fill out [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) completely, written in clear, human-friendly plain English without AI filler buzzwords (*delve, leverage, robust, seamless, comprehensive, cutting-edge*), and including a **Key Files Changed** breakdown and **Mermaid/ASCII diagram** whenever architectural context is helpful.
+
+For complete rules and agent operating instructions, read **[`AGENTS.md`](AGENTS.md)**.
 
 ### How to Get Started:
-1. **Fork** the repository and create your feature branch (`git checkout -b feat/amazing-dsp-module`).
-2. **Build & Test** locally using `make build && make test`.
-3. **Commit** your changes with clear messages and open a **Pull Request**—we're excited to review and jam on your ideas!
+1. **Sync & Branch**: Pull latest `main` (`git checkout main && git pull --ff-only origin main`) and create your branch (`git checkout -b feat/amazing-dsp-module`).
+2. **OpenSpec Lifecycle**: Propose your change with `/opsx-propose <name>` (or `openspec new change <name>`).
+3. **Build & Test**: Build and test locally using `make build && make test`.
+4. **Archive & PR**: Archive your change (`openspec archive <name>`) and open a Pull Request matching [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md)!
 
 ---
 
