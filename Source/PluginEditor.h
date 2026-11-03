@@ -191,7 +191,7 @@ private:
     juce::TextButton xyTabButton { "X/Y PAD" };
     juce::TextButton monitorTabButton { "MONITOR" };
     camelphat::ui::SignalComparisonComponent signalVisualizer;
-    bool showingMonitor { false };
+    bool showingMonitor { true };
 
     camelphat::ui::XYPadComponent xyPad;
     ComboControl xyXTargetBox;

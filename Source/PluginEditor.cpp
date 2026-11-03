@@ -407,7 +407,7 @@ CamelPhatAudioProcessorEditor::CamelPhatAudioProcessorEditor(CamelPhatAudioProce
         }
     };
 
-    setCenterTab(false);
+    setCenterTab(true);
 
     const auto& lfoWaves = camelphat::getLFOWaveformNames();
     const auto& syncDivs = camelphat::getLFOSyncDivNames();
