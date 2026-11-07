@@ -34,6 +34,12 @@ private:
         std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attachment;
     };
 
+    struct ComboControl
+    {
+        juce::ComboBox box;
+        std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> attachment;
+    };
+
     void initRotary(RotaryControl& rc, const juce::String& paramId, const juce::String& labelText,
                     juce::Colour accent = ui::WvZzLookAndFeel::neonAmber);
 
@@ -43,6 +49,7 @@ private:
     ui::ModuleCardComponent card;
 
     ToggleControl bypassToggle;
+    ComboControl modeSelector;
     std::unique_ptr<ui::HelpButtonComponent> helpButton;
 
     RotaryControl mechKnob;

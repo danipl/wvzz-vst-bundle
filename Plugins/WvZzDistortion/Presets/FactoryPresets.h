@@ -252,6 +252,168 @@ inline const std::vector<FactoryPreset>& getFactoryPresets()
                 { "master_mix", 1.0f },
                 { "master_vol", 0.0f }
             }
+        },
+        // 11. Hardstyle Kick Tok & Crunch
+        {
+            "Hardstyle Kick Tok & Crunch",
+            {
+                { "bp_bypass", 0.0f },
+                { "bp_low_cut", 45.0f },
+                { "bp_high_cut", 6500.0f },
+                { "bp_low_res", 0.2f },
+                { "bp_high_res", 0.3f },
+                { "bp_br_mix", 0.35f },
+                { "meq_bypass", 0.0f },
+                { "meq_pre", 1.0f },
+                { "meq_tune", 90.0f },
+                { "meq_amount", 0.85f },
+                { "meq_phat", 1.0f },
+                { "dist_bypass", 0.0f },
+                { "dist_mode", 1.0f }, // Hard Clip
+                { "dist_mech", 0.8f },
+                { "dist_tube", 0.7f },
+                { "dist_xcita", 0.3f },
+                { "mm_bypass", 0.0f },
+                { "mm_type", 1.0f }, // LP 24dB
+                { "mm_cutoff", 3500.0f },
+                { "mm_res", 0.4f },
+                { "flg_bypass", 1.0f },
+                { "comp_bypass", 0.0f },
+                { "comp_amount", 0.75f },
+                { "comp_phat", 1.0f },
+                { "master_clip", 1.0f },
+                { "master_mono_bass", 1.0f },
+                { "master_mix", 1.0f },
+                { "master_vol", 0.0f }
+            }
+        },
+        // 12. Euphoric Supersaw Excite
+        {
+            "Euphoric Supersaw Excite",
+            {
+                { "bp_bypass", 0.0f },
+                { "bp_low_cut", 120.0f },
+                { "bp_high_cut", 18000.0f },
+                { "bp_low_res", 0.0f },
+                { "bp_high_res", 0.0f },
+                { "bp_br_mix", 0.2f },
+                { "dist_bypass", 0.0f },
+                { "dist_mode", 0.0f }, // Classic
+                { "dist_mech", 0.0f },
+                { "dist_tube", 0.35f },
+                { "dist_bit", 0.0f },
+                { "dist_xcita", 0.45f },
+                { "mm_bypass", 1.0f },
+                { "flg_bypass", 0.0f },
+                { "flg_rate", 0.2f },
+                { "flg_amount", 0.2f },
+                { "meq_bypass", 0.0f },
+                { "meq_pre", 0.0f },
+                { "meq_tune", 110.0f },
+                { "meq_amount", 0.3f },
+                { "meq_phat", 1.0f },
+                { "comp_bypass", 0.0f },
+                { "comp_amount", 0.35f },
+                { "comp_phat", 0.0f },
+                { "master_clip", 1.0f },
+                { "master_mono_bass", 1.0f },
+                { "master_mix", 0.85f },
+                { "master_vol", 0.0f }
+            }
+        },
+        // 13. Raw Screech Comb Screamer
+        {
+            "Raw Screech Comb Screamer",
+            {
+                { "bp_bypass", 0.0f },
+                { "bp_low_cut", 300.0f },
+                { "bp_high_cut", 8500.0f },
+                { "bp_br_mix", 0.0f },
+                { "dist_bypass", 0.0f },
+                { "dist_mode", 2.0f }, // Wavefold
+                { "dist_mech", 0.85f },
+                { "dist_tube", 0.5f },
+                { "mm_bypass", 0.0f },
+                { "mm_type", 8.0f }, // Comb +
+                { "mm_cutoff", 880.0f },
+                { "mm_res", 0.85f },
+                { "mm_env_depth", 0.65f },
+                { "flg_bypass", 1.0f },
+                { "meq_bypass", 1.0f },
+                { "comp_bypass", 0.0f },
+                { "comp_amount", 0.6f },
+                { "comp_phat", 1.0f },
+                { "master_clip", 1.0f },
+                { "master_mono_bass", 1.0f },
+                { "master_mix", 1.0f },
+                { "master_vol", 0.0f }
+            }
+        },
+        // 14. Reverse Bass Pump
+        {
+            "Reverse Bass Pump",
+            {
+                { "bp_bypass", 0.0f },
+                { "bp_low_cut", 35.0f },
+                { "bp_high_cut", 5000.0f },
+                { "bp_br_mix", 0.4f },
+                { "dist_bypass", 0.0f },
+                { "dist_mode", 1.0f }, // Hard Clip
+                { "dist_tube", 0.6f },
+                { "dist_mech", 0.4f },
+                { "mm_bypass", 0.0f },
+                { "mm_type", 0.0f }, // LP 12dB
+                { "mm_cutoff", 1600.0f },
+                { "mm_res", 0.5f },
+                { "flg_bypass", 1.0f },
+                { "meq_bypass", 0.0f },
+                { "meq_pre", 1.0f },
+                { "meq_tune", 65.0f },
+                { "meq_amount", 0.7f },
+                { "meq_phat", 1.0f },
+                { "comp_bypass", 0.0f },
+                { "comp_amount", 0.65f },
+                { "comp_phat", 1.0f },
+                { "lfo1_sync", 1.0f },
+                { "lfo1_sync_div", 4.0f }, // 1/4 note
+                { "lfo1_wave", 3.0f }, // Saw Up
+                { "lfo1_target", 21.0f }, // Master Vol
+                { "lfo1_depth", 0.7f },
+                { "master_clip", 1.0f },
+                { "master_mono_bass", 1.0f },
+                { "master_mix", 1.0f },
+                { "master_vol", 0.0f }
+            }
+        },
+        // 15. Big Room Festival Kick
+        {
+            "Big Room Festival Kick",
+            {
+                { "bp_bypass", 0.0f },
+                { "bp_low_cut", 50.0f },
+                { "bp_high_cut", 12000.0f },
+                { "bp_br_mix", 0.5f },
+                { "meq_bypass", 0.0f },
+                { "meq_pre", 0.0f },
+                { "meq_tune", 80.0f },
+                { "meq_amount", 0.75f },
+                { "meq_phat", 1.0f },
+                { "dist_bypass", 0.0f },
+                { "dist_mode", 1.0f }, // Hard Clip
+                { "dist_tube", 0.65f },
+                { "dist_mech", 0.5f },
+                { "dist_xcita", 0.35f },
+                { "mm_bypass", 1.0f },
+                { "flg_bypass", 1.0f },
+                { "comp_bypass", 0.0f },
+                { "comp_amount", 0.85f },
+                { "comp_release", 70.0f },
+                { "comp_phat", 1.0f },
+                { "master_clip", 1.0f },
+                { "master_mono_bass", 1.0f },
+                { "master_mix", 0.85f },
+                { "master_vol", 0.0f }
+            }
         }
     };
     return presets;

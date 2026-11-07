@@ -9,15 +9,15 @@
 
 **WvZz Distortion** is a specialized color and dynamics processor designed for modern sound design, electronic music, mixing, and aggressive tonal sculpting. Inspired by classic multi-effect saturation units such as CamelPhat 3, WvZz Distortion reimagines the concept with clean modern DSP, a high-resolution vector interface, and strict real-time audio safety.
 
-The plugin provides a curated chain of 7 processing blocks:
-1. **BP Filter**: Andy Simper Cytomic Zero-Delay Feedback (ZDF) SVF band-splitter isolating the saturation target frequency range while keeping untouched frequencies in an auxiliary band-reject buffer.
-2. **Distortion Unit**: Four distinct, parallel saturation circuits (Mechanical, Tube, Bitcrusher, Exciter) running in a 4x oversampled polyphase IIR pipeline with anti-aliasing and DC blocking.
+The plugin provides a curated chain of 8 processing blocks:
+1. **BP Filter**: Andy Simper Cytomic Zero-Delay Feedback (ZDF) SVF band-splitter isolating the saturation target frequency range while keeping phase-coherent rejected frequencies in an auxiliary band-reject buffer.
+2. **Distortion Unit**: Four serial-cascaded saturation circuits (Mechanical, Tube, Bitcrusher, Exciter) with selectable character modes (`Classic`, `Hard Clip`, `Wavefold`) running in a 4x oversampled polyphase IIR pipeline with anti-aliasing and DC blocking.
 3. **Multi-Mode (MM) Filter**: 12 diverse filter topologies (from standard Butterworth-style low/high/band-pass to aggressive comb filters, ring modulation, and five-vowel formant morphing) driven by an internal envelope follower.
-4. **Band-Reject Summing Node**: Cleanly recombines the filtered saturation path with the un-distorted auxiliary low/high bands according to the `BR Mix` control.
+4. **Band-Reject Summing Node**: Cleanly recombines the filtered saturation path with the latency-compensated un-distorted auxiliary low/high bands according to the `BR Mix` control.
 5. **Stereo Flanger**: Analog-modeled 3rd-order Lagrange fractional delay interpolation with a 90° quadrature stereo LFO for stereo widening and metallic resonances.
-6. **Magic EQ**: Musical sub-bass peaking booster (60–120 Hz) with an anti-mud corrective notch at $2 \times \text{tune}$ and an optional `PHAT` harmonic saturation circuit.
+6. **Magic EQ**: Musical resonant booster (45–180 Hz) with an anti-mud corrective notch at $2 \times \text{tune}$, optional `PHAT` harmonic saturation, and switchable **Pre-Distortion** routing (`PRE`) for Hardstyle kick-tok sculpting.
 7. **One-Knob Compressor**: Musical dynamic leveling with automated makeup gain, peak/RMS gain reduction metering, and switchable `Phat` extreme smash mode (12:1 ratio).
-8. **Modulation Matrix & Master Section**: Dual multi-waveform LFOs (Free & Tempo Sync), Macro X/Y Controller, dry/wet latency-compensated blending, safety hard clipping, and 60 FPS peak/RMS stereo metering.
+8. **Modulation Matrix & Master Section**: Dual beat-locked LFOs (Free & Host Tempo Sync with 4/4 grid phase lock), Macro X/Y Controller, 22 modulation targets (including `Master Vol`), Sub-Bass Mono Maker (`< 120 Hz`), 0 dBFS Output Clipper, click-free bypass crossfade, and 60 FPS peak/RMS stereo metering.
 
 ---
 

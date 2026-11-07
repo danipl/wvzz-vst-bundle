@@ -18,8 +18,8 @@ public:
 
     void reset() noexcept
     {
-        s1 = 0.0f;
-        s2 = 0.0f;
+        s1 = 0.0;
+        s2 = 0.0;
     }
 
     struct Output
@@ -31,23 +31,31 @@ public:
 
     [[nodiscard]] inline Output processSample(float in, float g, float k) noexcept
     {
-        const float denom = 1.0f / (1.0f + g * (g + k));
-        const float v1 = (s1 + g * (in - s2)) * denom;
-        const float v2 = s2 + g * v1;
+        const double gd = static_cast<double>(g);
+        const double kd = static_cast<double>(k);
+        const double ind = static_cast<double>(in);
 
-        s1 = 2.0f * v1 - s1;
-        s2 = 2.0f * v2 - s2;
+        const double a1 = 1.0 / (1.0 + gd * (gd + kd));
+        const double a2 = gd * a1;
+        const double a3 = gd * a2;
+
+        const double v3 = ind - s2;
+        const double v1 = a1 * s1 + a2 * v3;
+        const double v2 = s2 + a2 * s1 + a3 * v3;
+
+        s1 = 2.0 * v1 - s1;
+        s2 = 2.0 * v2 - s2;
 
         Output out;
-        out.lp = v2;
-        out.bp = v1;
-        out.hp = in - k * v1 - v2;
+        out.lp = static_cast<float>(v2);
+        out.bp = static_cast<float>(v1);
+        out.hp = static_cast<float>(ind - kd * v1 - v2);
         return out;
     }
 
 private:
-    float s1 { 0.0f };
-    float s2 { 0.0f };
+    double s1 { 0.0 };
+    double s2 { 0.0 };
 };
 
 /**
@@ -106,8 +114,11 @@ private:
     CytomicSVF svfLowR;
     CytomicSVF svfHighL;
     CytomicSVF svfHighR;
-    CytomicSVF svfHighCutInL;
-    CytomicSVF svfHighCutInR;
+
+    static constexpr int maxRejDelaySamples = 256;
+    std::array<float, maxRejDelaySamples> rejDelayBufferL {};
+    std::array<float, maxRejDelaySamples> rejDelayBufferR {};
+    int rejDelayWriteIndex { 0 };
 };
 
 } // namespace wvzz::modules

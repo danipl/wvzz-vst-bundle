@@ -70,8 +70,9 @@ void BPFilterDSP::reset() noexcept
     svfLowR.reset();
     svfHighL.reset();
     svfHighR.reset();
-    svfHighCutInL.reset();
-    svfHighCutInR.reset();
+    rejDelayBufferL.fill(0.0f);
+    rejDelayBufferR.fill(0.0f);
+    rejDelayWriteIndex = 0;
     lastModBrMix = 0.0f;
 }
 
@@ -126,60 +127,67 @@ void BPFilterDSP::process(ProcessContext& ctx) noexcept
     if (highResParam != nullptr) highResSmoothed.setTargetValue(highResParam->load(std::memory_order_relaxed));
     if (brMixParam != nullptr)   brMixSmoothed.setTargetValue(brMixParam->load(std::memory_order_relaxed));
 
-    const float curLowCut  = lowCutSmoothed.skip(numSamples);
-    const float curHighCut = highCutSmoothed.skip(numSamples);
-    const float curLowRes  = lowResSmoothed.skip(numSamples);
-    const float curHighRes = highResSmoothed.skip(numSamples);
-    const float curBrMix   = brMixSmoothed.skip(numSamples);
-
-    // Apply modulation offsets from ProcessContext
-    const float modLowCut  = juce::jlimit(20.0f, 20000.0f, curLowCut * std::pow(2.0f, (ctx.getModulationOffset(ModTarget::BPLowCut) + ctx.getModulationOffset(ModTarget::BPBothCuts)) * 4.0f));
-    const float modHighCut = juce::jlimit(modLowCut, 20000.0f, curHighCut * std::pow(2.0f, (ctx.getModulationOffset(ModTarget::BPHighCut) + ctx.getModulationOffset(ModTarget::BPBothCuts)) * 4.0f));
-    const float modLowRes  = juce::jlimit(0.0f, 1.0f, curLowRes + ctx.getModulationOffset(ModTarget::BPLowRes));
-    const float modHighRes = juce::jlimit(0.0f, 1.0f, curHighRes + ctx.getModulationOffset(ModTarget::BPHighRes));
+    const float curBrMix = brMixSmoothed.skip(numSamples);
     lastModBrMix = juce::jlimit(0.0f, 1.0f, curBrMix + ctx.getModulationOffset(ModTarget::BPBrMix));
 
-    // Q mapping: linear [0.707, 12.0]
-    const float qLow = juce::jmap(modLowRes, 0.707f, 12.0f);
-    const float qHigh = juce::jmap(modHighRes, 0.707f, 12.0f);
-    const float kLow = 1.0f / qLow;
-    const float kHigh = 1.0f / qHigh;
+    const float lowCutModMult  = std::pow(2.0f, (ctx.getModulationOffset(ModTarget::BPLowCut) + ctx.getModulationOffset(ModTarget::BPBothCuts)) * 4.0f);
+    const float highCutModMult = std::pow(2.0f, (ctx.getModulationOffset(ModTarget::BPHighCut) + ctx.getModulationOffset(ModTarget::BPBothCuts)) * 4.0f);
+    const float lowResModOff   = ctx.getModulationOffset(ModTarget::BPLowRes);
+    const float highResModOff  = ctx.getModulationOffset(ModTarget::BPHighRes);
 
-    const float maxFreq = static_cast<float>(sampleRate * 0.49);
-    const float safeLow  = juce::jlimit(20.0f, maxFreq, modLowCut);
-    const float safeHigh = juce::jlimit(safeLow, maxFreq, modHighCut);
+    // Cap cutoff strictly below 0.45 * fs to prevent bilinear frequency cramping near Nyquist
+    const float maxFreq = std::min(20000.0f, static_cast<float>(sampleRate * 0.45));
+    const float piOverFs = juce::MathConstants<float>::pi / static_cast<float>(sampleRate);
 
-    const float gLow = std::tan(juce::MathConstants<float>::pi * safeLow / static_cast<float>(sampleRate));
-    const float gHigh = std::tan(juce::MathConstants<float>::pi * safeHigh / static_cast<float>(sampleRate));
+    float* passL = ctx.mainBuffer.getWritePointer(0);
+    float* rejL  = ctx.auxBandRejectBuffer.getWritePointer(0);
+    float* passR = (numChannels > 1) ? ctx.mainBuffer.getWritePointer(1) : nullptr;
+    float* rejR  = (numChannels > 1) ? ctx.auxBandRejectBuffer.getWritePointer(1) : nullptr;
 
-    for (int ch = 0; ch < numChannels; ++ch)
+    for (int i = 0; i < numSamples; ++i)
     {
-        float* pass = ctx.mainBuffer.getWritePointer(ch);
-        float* rej  = ctx.auxBandRejectBuffer.getWritePointer(ch);
+        const float curLowCut  = lowCutSmoothed.getNextValue();
+        const float curHighCut = highCutSmoothed.getNextValue();
+        const float curLowRes  = lowResSmoothed.getNextValue();
+        const float curHighRes = highResSmoothed.getNextValue();
 
-        auto& svfL = (ch == 0) ? svfLowL : svfLowR;
-        auto& svfH = (ch == 0) ? svfHighL : svfHighR;
-        auto& svfHCIn = (ch == 0) ? svfHighCutInL : svfHighCutInR;
+        const float safeLow  = juce::jlimit(20.0f, maxFreq, curLowCut * lowCutModMult);
+        const float safeHigh = juce::jlimit(safeLow, maxFreq, curHighCut * highCutModMult);
 
-        for (int i = 0; i < numSamples; ++i)
+        const float modLowRes  = juce::jlimit(0.0f, 1.0f, curLowRes + lowResModOff);
+        const float modHighRes = juce::jlimit(0.0f, 1.0f, curHighRes + highResModOff);
+
+        // Nyquist Q-damping: progressively damp max Q near Nyquist to prevent high-cut instability
+        const float nyqRatioLow  = safeLow / maxFreq;
+        const float nyqRatioHigh = safeHigh / maxFreq;
+        const float maxQLow  = juce::jmap(nyqRatioLow * nyqRatioLow, 12.0f, 2.0f);
+        const float maxQHigh = juce::jmap(nyqRatioHigh * nyqRatioHigh, 12.0f, 2.0f);
+
+        const float qLow  = juce::jmap(modLowRes, 0.7071f, maxQLow);
+        const float qHigh = juce::jmap(modHighRes, 0.7071f, maxQHigh);
+        const float kLow  = 1.0f / qLow;
+        const float kHigh = 1.0f / qHigh;
+
+        const float gLow  = std::tan(piOverFs * safeLow);
+        const float gHigh = std::tan(piOverFs * safeHigh);
+
+        // Left Channel
         {
-            const float x = pass[i];
+            const float xL = passL[i];
+            auto outLowL   = svfLowL.processSample(xL, gLow, kLow);
+            auto outHighL  = svfHighL.processSample(outLowL.hp, gHigh, kHigh);
+            passL[i] = outHighL.lp;
+            rejL[i]  = outLowL.lp + outHighL.hp;
+        }
 
-            // 1. Low Cut filter on Input: extracts Low_Rejected = LP, and passband intermediate = HP
-            auto outLowCut = svfL.processSample(x, gLow, kLow);
-            const float lowRejected = outLowCut.lp;
-            const float highPassed  = outLowCut.hp;
-
-            // 2. High Cut filter on highPassed signal: extracts Passband = LP(highPassed)
-            auto outHighCut = svfH.processSample(highPassed, gHigh, kHigh);
-            const float passband = outHighCut.lp;
-
-            // 3. High Cut filter on Input directly to extract High_Rejected = HP(Input)
-            auto outHighRejected = svfHCIn.processSample(x, gHigh, kHigh);
-            const float highRejected = outHighRejected.hp;
-
-            pass[i] = passband;
-            rej[i]  = lowRejected + highRejected;
+        // Right Channel
+        if (passR != nullptr && rejR != nullptr)
+        {
+            const float xR = passR[i];
+            auto outLowR   = svfLowR.processSample(xR, gLow, kLow);
+            auto outHighR  = svfHighR.processSample(outLowR.hp, gHigh, kHigh);
+            passR[i] = outHighR.lp;
+            rejR[i]  = outLowR.lp + outHighR.hp;
         }
     }
 }
@@ -190,8 +198,30 @@ void BPFilterDSP::recombine(ProcessContext& ctx) noexcept
     {
         const int numSamples = ctx.mainBuffer.getNumSamples();
         const int numChannels = juce::jmin(ctx.mainBuffer.getNumChannels(), ctx.auxBandRejectBuffer.getNumChannels());
-        for (int ch = 0; ch < numChannels; ++ch)
-            ctx.mainBuffer.addFrom(ch, 0, ctx.auxBandRejectBuffer.getReadPointer(ch), numSamples, lastModBrMix);
+        const int latency = std::clamp(ctx.distortionLatencySamples, 0, maxRejDelaySamples - 1);
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            const float inRejL = ctx.auxBandRejectBuffer.getSample(0, i);
+            const float inRejR = (numChannels > 1) ? ctx.auxBandRejectBuffer.getSample(1, i) : inRejL;
+
+            rejDelayBufferL[static_cast<size_t>(rejDelayWriteIndex)] = inRejL;
+            rejDelayBufferR[static_cast<size_t>(rejDelayWriteIndex)] = inRejR;
+
+            int readIdx = rejDelayWriteIndex - latency;
+            if (readIdx < 0)
+                readIdx += maxRejDelaySamples;
+
+            const float delayedRejL = rejDelayBufferL[static_cast<size_t>(readIdx)];
+            const float delayedRejR = rejDelayBufferR[static_cast<size_t>(readIdx)];
+
+            if (++rejDelayWriteIndex >= maxRejDelaySamples)
+                rejDelayWriteIndex = 0;
+
+            ctx.mainBuffer.addSample(0, i, delayedRejL * lastModBrMix);
+            if (numChannels > 1)
+                ctx.mainBuffer.addSample(1, i, delayedRejR * lastModBrMix);
+        }
     }
 }
 

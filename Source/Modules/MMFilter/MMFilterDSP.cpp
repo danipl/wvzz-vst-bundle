@@ -163,13 +163,10 @@ void MMFilterDSP::process(ProcessContext& ctx) noexcept
     const float envRelMs = (envRelParam != nullptr) ? envRelParam->load(std::memory_order_relaxed) : 150.0f;
     envFollower.setAttackRelease(envAttMs, envRelMs);
 
-    const float maxFreq = static_cast<float>(sampleRate * 0.49);
+    const float maxFreq = std::min(20000.0f, static_cast<float>(sampleRate * 0.45));
     const float modCutoffRaw = juce::jlimit(20.0f, maxFreq, curCutoff * std::pow(2.0f, ctx.getModulationOffset(ModTarget::MMCutoff) * 4.0f));
     const float modRes = juce::jlimit(0.0f, 1.0f, curRes + ctx.getModulationOffset(ModTarget::MMRes));
     const float modMix = juce::jlimit(0.0f, 1.0f, curMix + ctx.getModulationOffset(ModTarget::MMMix));
-
-    const float q = juce::jmap(modRes, 0.707f, 12.0f);
-    const float k = 1.0f / q;
 
     static constexpr std::array<float, 5> formantF1 = { 800.0f,  400.0f,  300.0f,  500.0f,  350.0f };
     static constexpr std::array<float, 5> formantF2 = { 1200.0f, 1800.0f, 2200.0f, 900.0f,  750.0f };
@@ -196,6 +193,11 @@ void MMFilterDSP::process(ProcessContext& ctx) noexcept
             sampleCutoff *= std::pow(2.0f, octShift);
             sampleCutoff = juce::jlimit(20.0f, maxFreq, sampleCutoff);
         }
+
+        const float nyqRatio = sampleCutoff / maxFreq;
+        const float maxQ = juce::jmap(nyqRatio * nyqRatio, 12.0f, 2.0f);
+        const float q = juce::jmap(modRes, 0.7071f, maxQ);
+        const float k = 1.0f / q;
 
         const float g = std::tan(juce::MathConstants<float>::pi * sampleCutoff / static_cast<float>(sampleRate));
         float wetL = 0.0f;

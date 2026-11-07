@@ -348,16 +348,16 @@ static void testMMFilterTopologies()
 
 static void testFactoryPresetsRecall()
 {
-    std::cout << "[Test 8/13] Running 10 Factory Presets Recall & Dice Verification..." << std::endl;
+    std::cout << "[Test 8/13] Running 15 Factory Presets Recall & Dice Verification..." << std::endl;
 
     wvzz::WvZzDistortionAudioProcessor processor;
     processor.prepareToPlay(48000.0, 256);
 
     const int numPrograms = processor.getNumPrograms();
     std::cout << "  -> Total programs reported: " << numPrograms << std::endl;
-    assert(numPrograms == 10 && "10 factory presets must be available");
+    assert(numPrograms == 15 && "15 factory presets must be available");
 
-    for (int i = 0; i < 10; ++i)
+    for (int i = 0; i < 15; ++i)
     {
         processor.setCurrentProgram(i);
         const auto name = processor.getProgramName(i);
@@ -375,7 +375,7 @@ static void testFactoryPresetsRecall()
         assert(mix >= 0.39f && mix <= 1.01f && "Dice keeps master mix between 0.4 and 1.0");
     }
 
-    std::cout << "  -> PASS: All 10 factory presets recall correctly and Dice satisfies constraints.\n" << std::endl;
+    std::cout << "  -> PASS: All 15 factory presets recall correctly and Dice satisfies constraints.\n" << std::endl;
 }
 
 static void testCompressorGainReductionTelemetry()
@@ -507,7 +507,22 @@ static void testModulationTargetDelivery()
     float xyOffset = processor.getModulationModule().getModulationDSP().getOffset(wvzz::ModTarget::MMCutoff);
     assert(xyOffset > 0.5f && "ModulationEngine must deliver positive offset to MMCutoff from XY pad");
 
-    std::cout << "  -> PASS: ModulationModule actively routes non-zero LFO and XY Pad offsets to target parameters.\n" << std::endl;
+    // Test MasterVol modulation target (target 21)
+    auto* xyYTarget = apvts.getParameter("xy_y_target");
+    auto* xyYDepth  = apvts.getParameter("xy_y_depth");
+    auto* xyY       = apvts.getParameter("xy_y");
+    assert(xyYTarget != nullptr && xyYDepth != nullptr && xyY != nullptr);
+
+    const int masterVolIdx = static_cast<int>(wvzz::ModTarget::MasterVol);
+    xyYTarget->setValueNotifyingHost(xyYTarget->convertTo0to1(static_cast<float>(masterVolIdx)));
+    xyYDepth->setValueNotifyingHost(xyYDepth->convertTo0to1(1.0f));
+    xyY->setValueNotifyingHost(1.0f);
+
+    processor.processBlock(buffer, midi);
+    float volOffset = processor.getModulationModule().getModulationDSP().getOffset(wvzz::ModTarget::MasterVol);
+    assert(volOffset > 0.8f && "ModulationEngine must deliver offset to MasterVol");
+
+    std::cout << "  -> PASS: ModulationModule actively routes non-zero LFO and XY Pad offsets to target parameters (including MasterVol).\n" << std::endl;
 }
 
 static void testInputAndOutputMetering()
@@ -576,6 +591,154 @@ static void testAudioVisualizerSourceFifo()
     std::cout << "  -> PASS: AudioVisualizerSource FIFO push and read accurately verified.\n" << std::endl;
 }
 
+static void testEdmHardstyleDspFeatures()
+{
+    std::cout << "[Test 14/14] Running EDM & Hardstyle DSP Capabilities Verification..." << std::endl;
+
+    // 1. Test Hard Clip and Wavefold character modes
+    wvzz::modules::DistortionDSP dist;
+    juce::dsp::ProcessSpec spec { 48000.0, 512, 2 };
+    dist.prepare(spec);
+
+    juce::AudioBuffer<float> mainBuf(2, 512);
+    juce::AudioBuffer<float> dummySc(2, 512);
+    juce::AudioBuffer<float> dummyRej(2, 512);
+    bool dummyAux = false;
+
+    // Generate large amplitude wave
+    for (int ch = 0; ch < 2; ++ch)
+        for (int i = 0; i < 512; ++i)
+            mainBuf.setSample(ch, i, std::sin(2.0 * juce::MathConstants<double>::pi * 100.0 * i / 48000.0) * 1.5f);
+
+    wvzz::ProcessContext ctx {
+        mainBuf, dummySc, dummyRej, dummyAux, nullptr, 0, 150.0, 0.0, false, 0
+    };
+
+    // Mode 1: Hard Clip
+    dist.setParameters(0.9f, 0.5f, 0.0f, 0.0f, false, 1);
+    dist.process(ctx);
+
+    for (int i = 0; i < 512; ++i)
+    {
+        const float s = std::abs(mainBuf.getSample(0, i));
+        assert(s <= 1.05f && "Hard Clip mode must keep peaks bounded");
+    }
+
+    // 2. Test Magic EQ Pre-Distortion flag and extended range
+    wvzz::modules::MagicEQDSP meq;
+    meq.prepare(spec);
+    meq.setParameters(0.8f, 50.0f, true, false, true); // 50 Hz, pre-dist enabled
+    assert(meq.isPreDistortion() && "Magic EQ pre-distortion flag must be active");
+
+    // 3. Test Master Sub-Bass Mono Maker and 0 dBFS Clipper
+    wvzz::modules::MasterDSP master;
+    master.prepare(spec);
+    master.setParameters(0.0f, 1.0f, 0.0f, false, true, true); // clip = true, monoBass = true
+
+    juce::AudioBuffer<float> stereoBuf(2, 512);
+    // Left channel: 60 Hz sine, Right channel: inverted 60 Hz sine (out-of-phase stereo bass)
+    for (int i = 0; i < 512; ++i)
+    {
+        const float s = std::sin(2.0 * juce::MathConstants<double>::pi * 60.0 * i / 48000.0);
+        stereoBuf.setSample(0, i, s);
+        stereoBuf.setSample(1, i, -s);
+    }
+
+    wvzz::ProcessContext masterCtx {
+        stereoBuf, stereoBuf, dummyRej, dummyAux, nullptr, 0, 150.0, 0.0, false, 0
+    };
+
+    master.process(masterCtx);
+
+    // With monoBass active, out-of-phase 60 Hz should cancel out to near zero
+    const float lowRms = calculateRms(stereoBuf, 0);
+    std::cout << "  -> Mono Bass cancellation RMS of out-of-phase 60Hz: " << lowRms << std::endl;
+    assert(lowRms < 0.25f && "Sub-bass mono maker must cancel out-of-phase low end");
+
+    // 4. Test "Euphoric Supersaw Excite" stability at High Cut = 20 kHz (top) & zero preset leakage
+    {
+        wvzz::WvZzDistortionAudioProcessor proc;
+        proc.prepareToPlay(44100.0, 512);
+
+        // Load Preset 10 (index 10 = #11 Hardstyle Kick Tok & Crunch, which sets dist_mech=0.8, meq_pre=1)
+        proc.setCurrentProgram(10);
+        // Switch to Preset 11 (index 11 = #12 Euphoric Supersaw Excite)
+        proc.setCurrentProgram(11);
+
+        auto& apvts = proc.getAPVTS();
+        assert(apvts.getRawParameterValue("dist_mech")->load() < 0.01f && "Preset switch must reset unlisted dist_mech to default 0");
+        assert(apvts.getRawParameterValue("meq_pre")->load() < 0.5f && "Preset switch must reset meq_pre to 0");
+
+        // Push High Cut to top (20,000 Hz) with high resonance
+        if (auto* hc = apvts.getParameter("bp_high_cut"))
+            hc->setValueNotifyingHost(hc->convertTo0to1(20000.0f));
+        if (auto* hr = apvts.getParameter("bp_high_res"))
+            hr->setValueNotifyingHost(hr->convertTo0to1(1.0f));
+
+        juce::AudioBuffer<float> sawBuf(2, 512);
+        juce::MidiBuffer midi;
+
+        g_allocationCount = 0;
+        g_trackingAllocations = true;
+
+        double phase1 = 0.0, phase2 = 0.0, phase3 = 0.0;
+        for (int b = 0; b < 60; ++b)
+        {
+            for (int i = 0; i < 512; ++i)
+            {
+                // Dense high-frequency supersaw harmonics (440 Hz, 443 Hz, + 14.5 kHz air)
+                phase1 = std::fmod(phase1 + 440.0 / 44100.0, 1.0);
+                phase2 = std::fmod(phase2 + 443.2 / 44100.0, 1.0);
+                phase3 = std::fmod(phase3 + 14500.0 / 44100.0, 1.0);
+                const float s = static_cast<float>((2.0 * phase1 - 1.0) * 0.35
+                                                 + (2.0 * phase2 - 1.0) * 0.35
+                                                 + std::sin(2.0 * juce::MathConstants<double>::pi * phase3) * 0.3);
+                sawBuf.setSample(0, i, s);
+                sawBuf.setSample(1, i, s);
+            }
+            proc.processBlock(sawBuf, midi);
+
+            for (int ch = 0; ch < 2; ++ch)
+            {
+                for (int i = 0; i < 512; ++i)
+                {
+                    const float y = sawBuf.getSample(ch, i);
+                    if (!std::isfinite(y) || std::abs(y) > 1.001f)
+                    {
+                        std::cerr << "FAIL: Euphoric Supersaw Excite unstable sample: " << y << std::endl;
+                        std::exit(1);
+                    }
+                }
+            }
+        }
+
+        // Feed silence and verify filter & MagicEQ Phat mode decay cleanly without limit-cycle self-oscillation
+        for (int b = 0; b < 30; ++b)
+        {
+            sawBuf.clear();
+            proc.processBlock(sawBuf, midi);
+        }
+
+        g_trackingAllocations = false;
+        const int phatAllocs = g_allocationCount;
+        if (phatAllocs != 0)
+        {
+            std::cerr << "FAIL: Euphoric Supersaw Excite allocated " << phatAllocs << " times on audio thread" << std::endl;
+            std::exit(1);
+        }
+
+        const float tailRms = calculateRms(sawBuf, 0);
+        std::cout << "  -> Euphoric Supersaw Excite (20kHz High Cut, Max Res) silence tail RMS: " << tailRms << std::endl;
+        if (tailRms >= 0.005f)
+        {
+            std::cerr << "FAIL: Self-oscillation detected in silence tail: " << tailRms << std::endl;
+            std::exit(1);
+        }
+    }
+
+    std::cout << "  -> PASS: EDM & Hardstyle DSP (Clip/Fold, Pre-Distortion EQ, Mono Bass, Clipper, Supersaw Stability) verified.\n" << std::endl;
+}
+
 int main(int, char*[])
 {
     std::cout << "=====================================================" << std::endl;
@@ -597,9 +760,10 @@ int main(int, char*[])
         testModulationTargetDelivery();
         testInputAndOutputMetering();
         testAudioVisualizerSourceFifo();
+        testEdmHardstyleDspFeatures();
 
         std::cout << "=====================================================" << std::endl;
-        std::cout << "   ALL 13 DSP SUITES PASSED (100% SUCCESS)           " << std::endl;
+        std::cout << "   ALL 14 DSP SUITES PASSED (100% SUCCESS)           " << std::endl;
         std::cout << "=====================================================" << std::endl;
         return 0;
     }

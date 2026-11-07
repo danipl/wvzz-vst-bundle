@@ -56,6 +56,9 @@ private:
     RotaryControl mixKnob;
     RotaryControl volKnob;
 
+    ToggleControl clipToggle;
+    ToggleControl monoBassToggle;
+
     std::unique_ptr<ui::StereoVUMeterComponent> inputMeter;
     std::unique_ptr<ui::StereoVUMeterComponent> outputMeter;
 

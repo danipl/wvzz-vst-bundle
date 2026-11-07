@@ -16,10 +16,13 @@ void MagicEQDSP::registerParameters(juce::AudioProcessorValueTreeState::Paramete
         juce::ParameterID{ paramId("amount"), 1 }, "Magic EQ Amount", 0.0f, 1.0f, 0.0f));
 
     layout.add(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{ paramId("tune"), 1 }, "Magic EQ Tune", 60.0f, 120.0f, 80.0f));
+        juce::ParameterID{ paramId("tune"), 1 }, "Magic EQ Tune", 45.0f, 180.0f, 80.0f));
 
     layout.add(std::make_unique<juce::AudioParameterBool>(
         juce::ParameterID{ paramId("phat"), 1 }, "Magic EQ Phat Mode", false));
+
+    layout.add(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID{ paramId("pre"), 1 }, "Magic EQ Pre Dist", false));
 }
 
 void MagicEQDSP::bindParameters(juce::AudioProcessorValueTreeState& apvts)
@@ -28,13 +31,12 @@ void MagicEQDSP::bindParameters(juce::AudioProcessorValueTreeState& apvts)
     amountParam = apvts.getRawParameterValue(paramId("amount"));
     tuneParam   = apvts.getRawParameterValue(paramId("tune"));
     phatParam   = apvts.getRawParameterValue(paramId("phat"));
+    preParam    = apvts.getRawParameterValue(paramId("pre"));
 }
 
 void MagicEQDSP::prepare(const juce::dsp::ProcessSpec& spec)
 {
     sampleRate = spec.sampleRate;
-    highShelfL.prepare(spec);
-    highShelfR.prepare(spec);
 
     const double rampTimeSec = 0.015;
     amountSmoothed.reset(sampleRate, rampTimeSec);
@@ -48,24 +50,26 @@ void MagicEQDSP::prepare(const juce::dsp::ProcessSpec& spec)
 
 void MagicEQDSP::reset() noexcept
 {
-    boostS1L = 0.0f; boostS2L = 0.0f;
-    boostS1R = 0.0f; boostS2R = 0.0f;
+    boostS1L = 0.0; boostS2L = 0.0;
+    boostS1R = 0.0; boostS2R = 0.0;
 
-    dipS1L = 0.0f; dipS2L = 0.0f;
-    dipS1R = 0.0f; dipS2R = 0.0f;
+    dipS1L = 0.0; dipS2L = 0.0;
+    dipS1R = 0.0; dipS2R = 0.0;
 
-    highShelfL.reset();
-    highShelfR.reset();
+    shelfS1L = 0.0; shelfS2L = 0.0;
+    shelfS1R = 0.0; shelfS2R = 0.0;
 }
 
-void MagicEQDSP::setParameters(float amountNorm, float tuneHz, bool phatModeEnabled, bool bypass) noexcept
+void MagicEQDSP::setParameters(float amountNorm, float tuneHz, bool phatModeEnabled, bool bypass, bool pre) noexcept
 {
     amountSmoothed.setCurrentAndTargetValue(juce::jlimit(0.0f, 1.0f, amountNorm));
-    tuneSmoothed.setCurrentAndTargetValue(juce::jlimit(60.0f, 120.0f, tuneHz));
+    tuneSmoothed.setCurrentAndTargetValue(juce::jlimit(45.0f, 180.0f, tuneHz));
     if (phatParam != nullptr)
         phatParam->store(phatModeEnabled ? 1.0f : 0.0f, std::memory_order_relaxed);
     if (bypassParam != nullptr)
         bypassParam->store(bypass ? 1.0f : 0.0f, std::memory_order_relaxed);
+    if (preParam != nullptr)
+        preParam->store(pre ? 1.0f : 0.0f, std::memory_order_relaxed);
 }
 
 void MagicEQDSP::updateCoefficients(float amountVal, float tuneVal) noexcept
@@ -73,43 +77,65 @@ void MagicEQDSP::updateCoefficients(float amountVal, float tuneVal) noexcept
     if (sampleRate <= 0.0)
         return;
 
-    const float fs = static_cast<float>(sampleRate);
+    const double fs = sampleRate;
+    const double amt = static_cast<double>(amountVal);
+    const double tune = static_cast<double>(tuneVal);
 
     // 1. Peaking Boost at tune Hz
     {
-        const float boostDb = amountVal * 12.0f;
-        const float A = std::pow(10.0f, boostDb / 40.0f);
-        const float w0 = 2.0f * juce::MathConstants<float>::pi * tuneVal / fs;
-        const float cosW0 = std::cos(w0);
-        const float sinW0 = std::sin(w0);
-        constexpr float q = 1.6f;
-        const float alpha = sinW0 / (2.0f * q);
+        const double boostDb = amt * 12.0;
+        const double A = std::pow(10.0, boostDb / 40.0);
+        const double w0 = 2.0 * juce::MathConstants<double>::pi * tune / fs;
+        const double cosW0 = std::cos(w0);
+        const double sinW0 = std::sin(w0);
+        constexpr double q = 1.6;
+        const double alpha = sinW0 / (2.0 * q);
 
-        const float a0 = 1.0f + alpha / A;
-        b0_boost = (1.0f + alpha * A) / a0;
-        b1_boost = (-2.0f * cosW0) / a0;
-        b2_boost = (1.0f - alpha * A) / a0;
-        a1_boost = (-2.0f * cosW0) / a0;
-        a2_boost = (1.0f - alpha / A) / a0;
+        const double a0 = 1.0 + alpha / A;
+        b0_boost = (1.0 + alpha * A) / a0;
+        b1_boost = (-2.0 * cosW0) / a0;
+        b2_boost = (1.0 - alpha * A) / a0;
+        a1_boost = (-2.0 * cosW0) / a0;
+        a2_boost = (1.0 - alpha / A) / a0;
     }
 
     // 2. Complimentary Dip at 2 * tune Hz
     {
-        const float dipFreq = juce::jmin(fs * 0.48f, 2.0f * tuneVal);
-        const float dipDb = -2.5f * amountVal;
-        const float A = std::pow(10.0f, dipDb / 40.0f);
-        const float w0 = 2.0f * juce::MathConstants<float>::pi * dipFreq / fs;
-        const float cosW0 = std::cos(w0);
-        const float sinW0 = std::sin(w0);
-        constexpr float q = 2.0f;
-        const float alpha = sinW0 / (2.0f * q);
+        const double dipFreq = std::min(fs * 0.45, 2.0 * tune);
+        const double dipDb = -2.5 * amt;
+        const double A = std::pow(10.0, dipDb / 40.0);
+        const double w0 = 2.0 * juce::MathConstants<double>::pi * dipFreq / fs;
+        const double cosW0 = std::cos(w0);
+        const double sinW0 = std::sin(w0);
+        constexpr double q = 2.0;
+        const double alpha = sinW0 / (2.0 * q);
 
-        const float a0 = 1.0f + alpha / A;
-        b0_dip = (1.0f + alpha * A) / a0;
-        b1_dip = (-2.0f * cosW0) / a0;
-        b2_dip = (1.0f - alpha * A) / a0;
-        a1_dip = (-2.0f * cosW0) / a0;
-        a2_dip = (1.0f - alpha / A) / a0;
+        const double a0 = 1.0 + alpha / A;
+        b0_dip = (1.0 + alpha * A) / a0;
+        b1_dip = (-2.0 * cosW0) / a0;
+        b2_dip = (1.0 - alpha * A) / a0;
+        a1_dip = (-2.0 * cosW0) / a0;
+        a2_dip = (1.0 - alpha / A) / a0;
+    }
+
+    // 3. Zero-allocation 8 kHz High Shelf for Phat mode
+    {
+        const double shelfFreq = std::min(fs * 0.42, 8000.0);
+        const double shelfDb = 3.0 * amt;
+        const double A = std::pow(10.0, shelfDb / 40.0);
+        const double w0 = 2.0 * juce::MathConstants<double>::pi * shelfFreq / fs;
+        const double cosW0 = std::cos(w0);
+        const double sinW0 = std::sin(w0);
+        constexpr double q = 0.70710678;
+        const double alpha = sinW0 / (2.0 * q);
+        const double twoSqrtAAlpha = 2.0 * std::sqrt(A) * alpha;
+
+        const double a0 = (A + 1.0) - (A - 1.0) * cosW0 + twoSqrtAAlpha;
+        b0_shelf = (A * ((A + 1.0) + (A - 1.0) * cosW0 + twoSqrtAAlpha)) / a0;
+        b1_shelf = (-2.0 * A * ((A - 1.0) + (A + 1.0) * cosW0)) / a0;
+        b2_shelf = (A * ((A + 1.0) + (A - 1.0) * cosW0 - twoSqrtAAlpha)) / a0;
+        a1_shelf = (2.0 * ((A - 1.0) - (A + 1.0) * cosW0)) / a0;
+        a2_shelf = ((A + 1.0) - (A - 1.0) * cosW0 - twoSqrtAAlpha) / a0;
     }
 }
 
@@ -132,7 +158,7 @@ void MagicEQDSP::process(ProcessContext& ctx) noexcept
     const float curTune   = tuneSmoothed.skip(numSamples);
 
     const float modAmount = juce::jlimit(0.0f, 1.0f, curAmount + ctx.getModulationOffset(ModTarget::MagicEQAmount));
-    const float modTune   = juce::jlimit(60.0f, 120.0f, curTune + ctx.getModulationOffset(ModTarget::MagicEQTune) * 30.0f);
+    const float modTune   = juce::jlimit(45.0f, 180.0f, curTune + ctx.getModulationOffset(ModTarget::MagicEQTune) * 45.0f);
 
     if (modAmount <= 0.001f)
         return;
@@ -146,60 +172,56 @@ void MagicEQDSP::process(ProcessContext& ctx) noexcept
 
     for (int i = 0; i < numSamples; ++i)
     {
-        // Left Channel
-        const float inL = channelLeft[i];
-        float boostOutL = b0_boost * inL + boostS1L;
-        if (phatMode)
-        {
-            boostS1L = b1_boost * inL - a1_boost * std::tanh(boostOutL * 1.2f) + boostS2L;
-            boostS2L = b2_boost * inL - a2_boost * std::tanh(boostOutL * 1.2f);
-        }
-        else
-        {
-            boostS1L = b1_boost * inL - a1_boost * boostOutL + boostS2L;
-            boostS2L = b2_boost * inL - a2_boost * boostOutL;
-        }
+        // Left Channel: strictly linear biquad recurrence so poles never shift or intermodulate highs
+        const double inL = static_cast<double>(channelLeft[i]);
+        const double linearBoostL = b0_boost * inL + boostS1L;
+        boostS1L = b1_boost * inL - a1_boost * linearBoostL + boostS2L;
+        boostS2L = b2_boost * inL - a2_boost * linearBoostL;
 
-        float outL = b0_dip * boostOutL + dipS1L;
+        // Saturate only the isolated sub-bass peak band (linearBoostL - inL) in Phat mode
+        const double subBandL = linearBoostL - inL;
+        const double boostOutL = phatMode
+            ? (inL + std::tanh(subBandL * 1.4) * (1.0 / 1.4))
+            : linearBoostL;
+
+        double outL = b0_dip * boostOutL + dipS1L;
         dipS1L = b1_dip * boostOutL - a1_dip * outL + dipS2L;
         dipS2L = b2_dip * boostOutL - a2_dip * outL;
-        channelLeft[i] = outL;
+
+        if (phatMode)
+        {
+            const double shelfInL = outL;
+            outL = b0_shelf * shelfInL + shelfS1L;
+            shelfS1L = b1_shelf * shelfInL - a1_shelf * outL + shelfS2L;
+            shelfS2L = b2_shelf * shelfInL - a2_shelf * outL;
+        }
+        channelLeft[i] = static_cast<float>(outL);
 
         // Right Channel
         if (channelRight != nullptr)
         {
-            const float inR = channelRight[i];
-            float boostOutR = b0_boost * inR + boostS1R;
-            if (phatMode)
-            {
-                boostS1R = b1_boost * inR - a1_boost * std::tanh(boostOutR * 1.2f) + boostS2R;
-                boostS2R = b2_boost * inR - a2_boost * std::tanh(boostOutR * 1.2f);
-            }
-            else
-            {
-                boostS1R = b1_boost * inR - a1_boost * boostOutR + boostS2R;
-                boostS2R = b2_boost * inR - a2_boost * boostOutR;
-            }
+            const double inR = static_cast<double>(channelRight[i]);
+            const double linearBoostR = b0_boost * inR + boostS1R;
+            boostS1R = b1_boost * inR - a1_boost * linearBoostR + boostS2R;
+            boostS2R = b2_boost * inR - a2_boost * linearBoostR;
 
-            float outR = b0_dip * boostOutR + dipS1R;
+            const double subBandR = linearBoostR - inR;
+            const double boostOutR = phatMode
+                ? (inR + std::tanh(subBandR * 1.4) * (1.0 / 1.4))
+                : linearBoostR;
+
+            double outR = b0_dip * boostOutR + dipS1R;
             dipS1R = b1_dip * boostOutR - a1_dip * outR + dipS2R;
             dipS2R = b2_dip * boostOutR - a2_dip * outR;
-            channelRight[i] = outR;
-        }
-    }
 
-    if (phatMode && modAmount > 0.01f)
-    {
-        auto shelfCoeffs = juce::dsp::IIR::Coefficients<float>::makeHighShelf(
-            sampleRate, 8000.0f, 0.7071f, juce::Decibels::decibelsToGain(3.0f * modAmount));
-        highShelfL.coefficients = shelfCoeffs;
-        highShelfR.coefficients = shelfCoeffs;
-
-        for (int i = 0; i < numSamples; ++i)
-        {
-            channelLeft[i] = highShelfL.processSample(channelLeft[i]);
-            if (channelRight != nullptr)
-                channelRight[i] = highShelfR.processSample(channelRight[i]);
+            if (phatMode)
+            {
+                const double shelfInR = outR;
+                outR = b0_shelf * shelfInR + shelfS1R;
+                shelfS1R = b1_shelf * shelfInR - a1_shelf * outR + shelfS2R;
+                shelfS2R = b2_shelf * shelfInR - a2_shelf * outR;
+            }
+            channelRight[i] = static_cast<float>(outR);
         }
     }
 }

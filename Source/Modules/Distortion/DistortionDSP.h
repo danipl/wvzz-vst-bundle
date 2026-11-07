@@ -31,7 +31,7 @@ public:
     }
 
     // Direct setters for testing
-    void setParameters(float mechNorm, float tubeNorm, float bitNorm, float xcitaNorm, bool bypass = false) noexcept;
+    void setParameters(float mechNorm, float tubeNorm, float bitNorm, float xcitaNorm, bool bypass = false, int mode = 0) noexcept;
 
 private:
     juce::String instancePrefix;
@@ -42,6 +42,7 @@ private:
     std::atomic<float>* tubeParam   { nullptr };
     std::atomic<float>* bitParam    { nullptr };
     std::atomic<float>* xcitaParam  { nullptr };
+    std::atomic<float>* modeParam   { nullptr };
 
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> mechSmoothed;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> tubeSmoothed;

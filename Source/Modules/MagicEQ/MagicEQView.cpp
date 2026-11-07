@@ -43,6 +43,14 @@ MagicEQView::MagicEQView(juce::AudioProcessorValueTreeState& apvts,
     phatToggle.attachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
         apvtsState, paramId("phat"), phatToggle.button);
     addAndMakeVisible(phatToggle.button);
+
+    // Pre Dist Toggle Button
+    preToggle.button.setButtonText("PRE");
+    preToggle.button.getProperties().set("isPill", true);
+    preToggle.button.getProperties().set("accentColor", static_cast<int>(ui::WvZzLookAndFeel::neonAmber.getARGB()));
+    preToggle.attachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+        apvtsState, paramId("pre"), preToggle.button);
+    addAndMakeVisible(preToggle.button);
 }
 
 void MagicEQView::initRotary(RotaryControl& rc, const juce::String& paramId, const juce::String& labelText,
@@ -79,7 +87,9 @@ void MagicEQView::resized()
 
     auto content = card.getContentBounds();
     auto meqTop = content.removeFromTop(20);
-    phatToggle.button.setBounds(meqTop.removeFromRight(50).reduced(0, 1));
+    phatToggle.button.setBounds(meqTop.removeFromRight(46).reduced(0, 1));
+    meqTop.removeFromRight(4);
+    preToggle.button.setBounds(meqTop.removeFromRight(44).reduced(0, 1));
 
     auto layoutKnob = [](RotaryControl& rc, juce::Rectangle<int> r) {
         int labelH = 14;

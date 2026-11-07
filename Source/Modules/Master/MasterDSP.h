@@ -2,6 +2,7 @@
 
 #include "../../Core/Interfaces/IDSPModule.h"
 #include "../../Core/Interfaces/ProcessContext.h"
+#include "../BPFilter/BPFilterDSP.h"
 #include <juce_core/juce_core.h>
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <vector>
@@ -79,7 +80,7 @@ public:
         return inMeter;
     }
 
-    void setParameters(float inputGainDb, float mixNorm, float volDb, bool bypass = false) noexcept;
+    void setParameters(float inputGainDb, float mixNorm, float volDb, bool bypass = false, bool clip = true, bool monoBass = false) noexcept;
 
     // Helper to apply input gain before processing chain
     void applyInputGain(juce::AudioBuffer<float>& buffer) noexcept;
@@ -99,10 +100,16 @@ private:
     std::atomic<float>* mixParam       { nullptr };
     std::atomic<float>* volParam       { nullptr };
     std::atomic<float>* bypassParam    { nullptr };
+    std::atomic<float>* clipParam      { nullptr };
+    std::atomic<float>* monoBassParam  { nullptr };
 
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> inputGainSmoothed;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> mixSmoothed;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> volSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> bypassSmoothed;
+
+    CytomicSVF bassMonoSvfL;
+    CytomicSVF bassMonoSvfR;
 
     int maxDelaySamples { 2048 };
     int latencySamples { 0 };
