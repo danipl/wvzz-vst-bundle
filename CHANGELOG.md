@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.0](https://github.com/danipl/wvzz-vst-bundle/compare/v0.3.0...v0.4.0) (2026-11-07)
+
+
+### Features
+
+* **compressor:** add studio controls, optical ballistics, adaa saturation, and horizontal metering ([#11](https://github.com/danipl/wvzz-vst-bundle/issues/11)) ([02077e9](https://github.com/danipl/wvzz-vst-bundle/commit/02077e9c0d753c270d80052d2dd5b2237b095e6b))
+* **ui:** modernize module design with luminous dark glass styling ([#9](https://github.com/danipl/wvzz-vst-bundle/issues/9)) ([e6c28a7](https://github.com/danipl/wvzz-vst-bundle/commit/e6c28a779b9e6292a1495011d50db9258390b02c))
+
 ## [0.3.0](https://github.com/danipl/wvzz-vst-bundle/compare/v0.2.0...v0.3.0) (2026-11-07)
 
 
