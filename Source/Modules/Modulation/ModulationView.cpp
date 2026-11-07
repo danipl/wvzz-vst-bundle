@@ -53,7 +53,8 @@ void ModulationView::LFOScopeComponent::paint(juce::Graphics& g)
 ModulationView::ModulationView(juce::AudioProcessorValueTreeState& apvts,
                                ModulationDSP& dsp,
                                dsp::AudioVisualizerSource* visualizerSource,
-                               ui::IHelpOverlayHost* helpHost)
+                               ui::IHelpOverlayHost* helpHost,
+                               ModProfile profile)
     : apvtsState(apvts),
       modDSP(dsp),
       card("MODULATION & X/Y", ui::WvZzLookAndFeel::skyCyan)
@@ -88,7 +89,7 @@ ModulationView::ModulationView(juce::AudioProcessorValueTreeState& apvts,
         addChildComponent(*signalVisualizer);
     }
 
-    const auto& modTargets = getModTargetNames();
+    const auto& modTargets = getModTargetNames(profile);
     initCombo(xyXTargetBox, "xy_x_target", "X Target", modTargets);
     initCombo(xyYTargetBox, "xy_y_target", "Y Target", modTargets);
     initRotary(xyXDepthKnob, "xy_x_depth", "X Depth", true, ui::WvZzLookAndFeel::skyCyan);

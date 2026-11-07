@@ -33,9 +33,9 @@ inline const juce::StringArray& getLFOSyncDivNames()
     return names;
 }
 
-inline const juce::StringArray& getModTargetNames()
+inline const juce::StringArray& getModTargetNames(ModProfile profile = ModProfile::Distortion)
 {
-    static const juce::StringArray names {
+    static const juce::StringArray distNames {
         "None",
         "BP Low Cut",
         "BP High Cut",
@@ -59,16 +59,73 @@ inline const juce::StringArray& getModTargetNames()
         "LFO 2 Rate",
         "Master Vol"
     };
-    return names;
+
+    static const juce::StringArray dynNames {
+        "None",
+        "Sub X-Over",
+        "SC HPF",
+        "Trans Attack",
+        "Trans Sustain",
+        "OTT Depth",
+        "OTT Upward",
+        "OTT Sheen",
+        "Comp Thresh",
+        "Comp Mix",
+        "Pump Amount",
+        "Pump Curve",
+        "Clip Drive",
+        "Master Mix",
+        "LFO 2 Rate",
+        "Master Vol"
+    };
+
+    return (profile == ModProfile::Dynamics) ? dynNames : distNames;
+}
+
+inline ModTarget getModTargetForIndex(int index, ModProfile profile = ModProfile::Distortion)
+{
+    if (profile == ModProfile::Distortion)
+    {
+        if (index >= 0 && index <= 21)
+            return static_cast<ModTarget>(index);
+        return ModTarget::None;
+    }
+
+    // Dynamics Profile mapping:
+    // 0: None, 1: DynSubXover, 2: DynScHp, 3: DynTransAttack, 4: DynTransSustain,
+    // 5: DynOttDepth, 6: DynOttUpDrive, 7: DynOttSheen, 8: DynCompThresh, 9: DynCompMix,
+    // 10: DynPumpAmount, 11: DynPumpCurve, 12: DynClipDrive, 13: MasterMix, 14: LFO2Rate, 15: MasterVol
+    switch (index)
+    {
+        case 0:  return ModTarget::None;
+        case 1:  return ModTarget::DynSubXover;
+        case 2:  return ModTarget::DynScHp;
+        case 3:  return ModTarget::DynTransAttack;
+        case 4:  return ModTarget::DynTransSustain;
+        case 5:  return ModTarget::DynOttDepth;
+        case 6:  return ModTarget::DynOttUpDrive;
+        case 7:  return ModTarget::DynOttSheen;
+        case 8:  return ModTarget::DynCompThresh;
+        case 9:  return ModTarget::DynCompMix;
+        case 10: return ModTarget::DynPumpAmount;
+        case 11: return ModTarget::DynPumpCurve;
+        case 12: return ModTarget::DynClipDrive;
+        case 13: return ModTarget::MasterMix;
+        case 14: return ModTarget::LFO2Rate;
+        case 15: return ModTarget::MasterVol;
+        default: return ModTarget::None;
+    }
 }
 
 class ModulationDSP : public IDSPModule
 {
 public:
-    static constexpr int numTargets = 22;
+    static constexpr int numTargets = 34;
 
-    explicit ModulationDSP(juce::String prefix = "mod");
+    explicit ModulationDSP(juce::String prefix = "mod", ModProfile profile = ModProfile::Distortion);
     ~ModulationDSP() override = default;
+
+    [[nodiscard]] ModProfile getModProfile() const noexcept { return modProfile; }
 
     [[nodiscard]] juce::String paramId(const juce::String& name) const
     {
@@ -110,6 +167,7 @@ private:
     void advanceLfoPhase(double& phase, float rateHz, int samples, int wave, float& shCurr, float& shNext) noexcept;
 
     juce::String instancePrefix;
+    ModProfile modProfile { ModProfile::Distortion };
     double currentSampleRate { 44100.0 };
     double hostBpm { 120.0 };
 

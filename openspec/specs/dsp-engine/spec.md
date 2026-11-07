@@ -72,15 +72,19 @@ The system SHALL provide a Pultec-style resonant low-end enhancer (`Magic EQ`) f
 - **THEN** `Magic EQ` processes the passband signal immediately before `Distortion` (and skips post-Flanger processing), driving the resonant peak at `meq_tune` directly into the 4-stage saturator to create pitched Hardstyle kick tails
 
 ### Requirement: Optical Compressor with Phat Mode
-The system SHALL provide a feed-forward optical compressor supporting independent parameters for Threshold `comp_thresh` (`-48.0` to `0.0 dB`, default `-18.0 dB`), Ratio `comp_ratio` (`1.5:1` to `20.0:1`, default `4.0:1`), Attack `comp_attack` (`0.1` to `50.0 ms`, default `5.0 ms`), Release `comp_release` (`10.0` to `1500.0 ms`, default `120.0 ms`), and parallel Mix `comp_mix` (`0.0` to `1.0`, default `1.0`), alongside legacy `comp_amount` drive compatibility, operating with decibel-domain dual-stage optical release ballistics, dynamic auto-makeup compensation, and a selectable Phat Mode (`comp_phat = 1`) featuring a post-makeup 1st-order ADAA `tanh` soft-clip ceiling at `-0.1 dBFS`.
+The system SHALL provide a feed-forward multi-topology compressor supporting independent parameters for Threshold `comp_thresh` (`-48.0` to `0.0 dB`, default `-18.0 dB`), Ratio `comp_ratio` (`1.5:1` to `20.0:1`, default `4.0:1`), Attack `comp_attack` (`0.1` to `50.0 ms`, default `5.0 ms`), Release `comp_release` (`10.0` to `1500.0 ms`, default `120.0 ms`), Knee `comp_knee` (`0.0` to `12.0 dB`, default `3.0 dB`), Circuit Topology Mode `comp_mode` (`0: Opto`, `1: VCA`, `2: FET`, default `0: Opto`), and parallel Mix `comp_mix` (`0.0` to `1.0`, default `1.0`), alongside legacy `comp_amount` drive compatibility, operating with topology-dependent detector ballistics (`Opto` dual-stage optical release, `VCA` linear-dB RMS bus glue, `FET` ultra-fast peak clamping), dynamic auto-makeup compensation, and a selectable Phat Mode (`comp_phat = 1`) featuring a post-makeup 1st-order ADAA `tanh` soft-clip ceiling at `-0.1 dBFS`.
 
 #### Scenario: Dynamic compression with Phat saturation
 - **WHEN** `comp_thresh` is set below signal level and `comp_phat` is toggled between `0` and `1`
-- **THEN** the compressor applies gain reduction based on `comp_thresh`, `comp_ratio`, `comp_attack`, and `comp_release`, switching between clean leveling and aggressive brickwall saturation with a `-0.1 dBFS` ADAA soft-clip ceiling
+- **THEN** the compressor applies gain reduction based on `comp_thresh`, `comp_ratio`, `comp_attack`, `comp_release`, and `comp_knee`, switching between clean leveling and aggressive brickwall saturation with a `-0.1 dBFS` ADAA soft-clip ceiling
 
 #### Scenario: Dual-stage optical release behavior
-- **WHEN** a transient exceeds the compressor threshold and subsequently falls below threshold
+- **WHEN** `comp_mode` is `0 (Opto)` and a transient exceeds the compressor threshold and subsequently falls below threshold
 - **THEN** the gain reduction decays in the decibel domain with a fast initial recovery stage (~50% of attenuation over 40–70 ms) followed by an exponential program-dependent tail stage scaled by `comp_release`
+
+#### Scenario: Selectable VCA and FET compressor circuit topologies
+- **WHEN** `comp_mode` is switched to `1 (VCA)` or `2 (FET)`
+- **THEN** `VCA` applies smooth RMS-integrated bus compression with soft-knee transition, while `FET` applies fast peak-sensing attack scaling (`0.2x` attack time multiplier) and high-ratio limiting punch
 
 #### Scenario: Anti-aliased Phat saturation ceiling
 - **WHEN** audio is processed in Phat Mode (`comp_phat = 1`) with peak levels exceeding the `-0.1 dBFS` ceiling

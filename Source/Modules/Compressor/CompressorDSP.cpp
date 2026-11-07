@@ -36,6 +36,13 @@ void CompressorDSP::registerParameters(juce::AudioProcessorValueTreeState::Param
 
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ paramId("mix"), 1 }, "Compressor Mix", 0.0f, 1.0f, 1.0f));
+
+    layout.add(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID{ paramId("mode"), 1 }, "Compressor Mode",
+        juce::StringArray{ "Opto", "VCA", "FET" }, 0));
+
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{ paramId("knee"), 1 }, "Compressor Knee", 0.0f, 12.0f, 3.0f));
 }
 
 void CompressorDSP::bindParameters(juce::AudioProcessorValueTreeState& apvts)
@@ -48,6 +55,8 @@ void CompressorDSP::bindParameters(juce::AudioProcessorValueTreeState& apvts)
     ratioParam   = apvts.getRawParameterValue(paramId("ratio"));
     attackParam  = apvts.getRawParameterValue(paramId("attack"));
     mixParam     = apvts.getRawParameterValue(paramId("mix"));
+    modeParam    = apvts.getRawParameterValue(paramId("mode"));
+    kneeParam    = apvts.getRawParameterValue(paramId("knee"));
 }
 
 void CompressorDSP::prepare(const juce::dsp::ProcessSpec& spec)
@@ -61,13 +70,22 @@ void CompressorDSP::prepare(const juce::dsp::ProcessSpec& spec)
     ratioSmoothed.reset(sampleRate, rampTimeSec);
     attackSmoothed.reset(sampleRate, rampTimeSec);
     mixSmoothed.reset(sampleRate, rampTimeSec);
+    kneeSmoothed.reset(sampleRate, rampTimeSec);
 
     if (amountParam != nullptr)  amountSmoothed.setCurrentAndTargetValue(amountParam->load(std::memory_order_relaxed));
+    else                         amountSmoothed.setCurrentAndTargetValue(0.0f);
     if (releaseParam != nullptr) releaseSmoothed.setCurrentAndTargetValue(releaseParam->load(std::memory_order_relaxed));
+    else                         releaseSmoothed.setCurrentAndTargetValue(120.0f);
     if (threshParam != nullptr)  threshSmoothed.setCurrentAndTargetValue(threshParam->load(std::memory_order_relaxed));
+    else                         threshSmoothed.setCurrentAndTargetValue(-18.0f);
     if (ratioParam != nullptr)   ratioSmoothed.setCurrentAndTargetValue(ratioParam->load(std::memory_order_relaxed));
+    else                         ratioSmoothed.setCurrentAndTargetValue(4.0f);
     if (attackParam != nullptr)  attackSmoothed.setCurrentAndTargetValue(attackParam->load(std::memory_order_relaxed));
+    else                         attackSmoothed.setCurrentAndTargetValue(5.0f);
     if (mixParam != nullptr)     mixSmoothed.setCurrentAndTargetValue(mixParam->load(std::memory_order_relaxed));
+    else                         mixSmoothed.setCurrentAndTargetValue(1.0f);
+    if (kneeParam != nullptr)    kneeSmoothed.setCurrentAndTargetValue(kneeParam->load(std::memory_order_relaxed));
+    else                         kneeSmoothed.setCurrentAndTargetValue(3.0f);
 
     reset();
 }
@@ -76,6 +94,8 @@ void CompressorDSP::reset() noexcept
 {
     fastEnvelopeDb = 0.0f;
     slowEnvelopeDb = 0.0f;
+    vcaEnvelopeDb  = 0.0f;
+    fetEnvelopeDb  = 0.0f;
     prevInNormL    = 0.0f;
     prevInNormR    = 0.0f;
     gainReductionDb.store(0.0f, std::memory_order_relaxed);
@@ -83,15 +103,23 @@ void CompressorDSP::reset() noexcept
 }
 
 void CompressorDSP::setParameters(float amountNorm, float releaseMs, bool phatModeEnabled, bool bypass,
-                                  float threshDb, float ratioVal, float attackMsVal, float mixVal) noexcept
+                                  float threshDb, float ratioVal, float attackMsVal, float mixVal,
+                                  int mode, float kneeDb) noexcept
 {
+    modeFallback = juce::jlimit(0, 2, mode);
+    phatFallback = phatModeEnabled;
+    bypassFallback = bypass;
+
     amountSmoothed.setCurrentAndTargetValue(juce::jlimit(0.0f, 1.0f, amountNorm));
     releaseSmoothed.setCurrentAndTargetValue(juce::jlimit(10.0f, 1500.0f, releaseMs));
     threshSmoothed.setCurrentAndTargetValue(juce::jlimit(-48.0f, 0.0f, threshDb));
     ratioSmoothed.setCurrentAndTargetValue(juce::jlimit(1.5f, 20.0f, ratioVal));
     attackSmoothed.setCurrentAndTargetValue(juce::jlimit(0.1f, 50.0f, attackMsVal));
     mixSmoothed.setCurrentAndTargetValue(juce::jlimit(0.0f, 1.0f, mixVal));
+    kneeSmoothed.setCurrentAndTargetValue(juce::jlimit(0.0f, 12.0f, kneeDb));
 
+    if (modeParam != nullptr)
+        modeParam->store(static_cast<float>(modeFallback), std::memory_order_relaxed);
     if (phatParam != nullptr)
         phatParam->store(phatModeEnabled ? 1.0f : 0.0f, std::memory_order_relaxed);
     if (bypassParam != nullptr)
@@ -106,11 +134,13 @@ void CompressorDSP::process(ProcessContext& ctx) noexcept
     if (numSamples == 0 || numChannels == 0)
         return;
 
-    const bool bypassed = (bypassParam != nullptr) && (bypassParam->load(std::memory_order_relaxed) > 0.5f);
+    const bool bypassed = (bypassParam != nullptr) ? (bypassParam->load(std::memory_order_relaxed) > 0.5f) : bypassFallback;
     if (bypassed)
     {
         fastEnvelopeDb = 0.0f;
         slowEnvelopeDb = 0.0f;
+        vcaEnvelopeDb  = 0.0f;
+        fetEnvelopeDb  = 0.0f;
         prevInNormL    = 0.0f;
         prevInNormR    = 0.0f;
         gainReductionDb.store(0.0f, std::memory_order_relaxed);
@@ -124,8 +154,9 @@ void CompressorDSP::process(ProcessContext& ctx) noexcept
     if (ratioParam != nullptr)   ratioSmoothed.setTargetValue(ratioParam->load(std::memory_order_relaxed));
     if (attackParam != nullptr)  attackSmoothed.setTargetValue(attackParam->load(std::memory_order_relaxed));
     if (mixParam != nullptr)     mixSmoothed.setTargetValue(mixParam->load(std::memory_order_relaxed));
+    if (kneeParam != nullptr)    kneeSmoothed.setTargetValue(kneeParam->load(std::memory_order_relaxed));
 
-    const bool phatMode = (phatParam != nullptr) && (phatParam->load(std::memory_order_relaxed) > 0.5f);
+    const bool phatMode = (phatParam != nullptr) ? (phatParam->load(std::memory_order_relaxed) > 0.5f) : phatFallback;
 
     constexpr float fastReleaseMs = 50.0f;
     const float fastReleaseCoeff = std::exp(-1.0f / (static_cast<float>(sampleRate) * fastReleaseMs * 0.001f));
@@ -137,7 +168,18 @@ void CompressorDSP::process(ProcessContext& ctx) noexcept
     float* channelLeft  = ctx.mainBuffer.getWritePointer(0);
     float* channelRight = (numChannels > 1) ? ctx.mainBuffer.getWritePointer(1) : nullptr;
 
-    const float modOffset = ctx.getModulationOffset(ModTarget::CompAmount);
+    const bool hasScBuf = useSidechainDetector
+        && (ctx.sidechainInputBuffer.getNumChannels() > 0)
+        && (ctx.sidechainInputBuffer.getNumSamples() >= numSamples);
+    const float* scLeft  = hasScBuf ? ctx.sidechainInputBuffer.getReadPointer(0) : nullptr;
+    const float* scRight = (hasScBuf && ctx.sidechainInputBuffer.getNumChannels() > 1)
+                               ? ctx.sidechainInputBuffer.getReadPointer(1)
+                               : nullptr;
+
+    const float modAmountOffset = ctx.getModulationOffset(ModTarget::CompAmount);
+    const float modThreshOffset = ctx.getModulationOffset(ModTarget::DynCompThresh);
+    const float modMixOffset    = ctx.getModulationOffset(ModTarget::DynCompMix);
+
     float blockPeakGrDb = 0.0f;
     bool blockSaturated = false;
 
@@ -149,16 +191,23 @@ void CompressorDSP::process(ProcessContext& ctx) noexcept
     {
         const int currentBlock = juce::jmin(subBlockSize, numSamples - samplesProcessed);
 
-        const float curAmount  = (amountParam != nullptr)  ? amountSmoothed.skip(currentBlock)  : 0.0f;
-        const float curRelease = (releaseParam != nullptr) ? releaseSmoothed.skip(currentBlock) : 120.0f;
-        const float curThresh  = (threshParam != nullptr)  ? threshSmoothed.skip(currentBlock)  : -18.0f;
-        const float curRatio   = (ratioParam != nullptr)   ? ratioSmoothed.skip(currentBlock)   : 4.0f;
-        const float curAttack  = (attackParam != nullptr)  ? attackSmoothed.skip(currentBlock)  : 5.0f;
-        const float curMix     = (mixParam != nullptr)     ? mixSmoothed.skip(currentBlock)     : 1.0f;
+        const float curAmount  = amountSmoothed.skip(currentBlock);
+        const float curRelease = releaseSmoothed.skip(currentBlock);
+        const float curThresh  = threshSmoothed.skip(currentBlock);
+        const float curRatio   = ratioSmoothed.skip(currentBlock);
+        const float curAttack  = attackSmoothed.skip(currentBlock);
+        const float curMixRaw  = mixSmoothed.skip(currentBlock);
+        const float curKnee    = kneeSmoothed.skip(currentBlock);
+        const int   curMode    = (modeParam != nullptr) ? static_cast<int>(modeParam->load(std::memory_order_relaxed)) : modeFallback;
+
+        const float curMix = juce::jlimit(0.0f, 1.0f, curMixRaw + modMixOffset);
 
         float effectiveAttack = curAttack;
         float effectiveRatio  = curRatio;
-        float kneeWidthDb     = 4.0f;
+        float kneeWidthDb     = curKnee;
+
+        if (curMode == 2) // FET Slam
+            effectiveAttack = juce::jmax(0.02f, curAttack * 0.2f);
 
         if (phatMode)
         {
@@ -167,14 +216,14 @@ void CompressorDSP::process(ProcessContext& ctx) noexcept
             kneeWidthDb     = 1.0f;
         }
 
-        const float safeAttack = juce::jmax(0.05f, effectiveAttack);
+        const float safeAttack = juce::jmax(0.02f, effectiveAttack);
         const float attackCoeff = std::exp(-1.0f / (static_cast<float>(sampleRate) * safeAttack * 0.001f));
 
         const float safeRelease = juce::jmax(1.0f, curRelease);
         const float slowReleaseCoeff = std::exp(-1.0f / (static_cast<float>(sampleRate) * safeRelease * 0.001f));
 
-        const float modAmount = juce::jlimit(0.0f, 1.0f, curAmount + modOffset);
-        const float effectiveThreshDb = curThresh - (36.0f * modAmount);
+        const float modAmount = juce::jlimit(0.0f, 1.0f, curAmount + modAmountOffset);
+        const float effectiveThreshDb = juce::jlimit(-60.0f, 0.0f, curThresh - (36.0f * modAmount) + (modThreshOffset * 24.0f));
         const float slope = 1.0f - (1.0f / effectiveRatio);
         const float halfKnee = kneeWidthDb * 0.5f;
 
@@ -187,7 +236,10 @@ void CompressorDSP::process(ProcessContext& ctx) noexcept
             const float inL = channelLeft[i];
             const float inR = (channelRight != nullptr) ? channelRight[i] : inL;
 
-            const float detectorIn = juce::jmax(std::abs(inL), std::abs(inR));
+            const float detSampleL = (scLeft != nullptr)  ? scLeft[i]  : inL;
+            const float detSampleR = (scRight != nullptr) ? scRight[i] : ((scLeft != nullptr) ? scLeft[i] : inR);
+
+            const float detectorIn = juce::jmax(std::abs(detSampleL), std::abs(detSampleR));
             const float inDb = juce::Decibels::gainToDecibels(std::max(detectorIn, minLevelLinear));
 
             // Static gain computer in dB
@@ -196,27 +248,47 @@ void CompressorDSP::process(ProcessContext& ctx) noexcept
             {
                 targetGrDb = -slope * (inDb - effectiveThreshDb);
             }
-            else if (inDb > effectiveThreshDb - halfKnee)
+            else if (inDb > effectiveThreshDb - halfKnee && kneeWidthDb > 1.0e-4f)
             {
                 const float diff = inDb - effectiveThreshDb + halfKnee;
                 targetGrDb = -slope * (diff * diff) / (2.0f * kneeWidthDb);
             }
 
-            // Dual-stage optical ballistics in dB
-            // Stage 1: Fast recovery (~50 ms)
-            if (targetGrDb < fastEnvelopeDb)
-                fastEnvelopeDb = targetGrDb + attackCoeff * (fastEnvelopeDb - targetGrDb);
-            else
-                fastEnvelopeDb = targetGrDb + fastReleaseCoeff * (fastEnvelopeDb - targetGrDb);
+            // Ballistics by circuit topology mode:
+            // Mode 0: Opto (dual-stage release)
+            // Mode 1: VCA (single-stage RMS bus glue)
+            // Mode 2: FET (fast peak sensing)
+            float grDb = 0.0f;
+            if (curMode == 0)
+            {
+                if (targetGrDb < fastEnvelopeDb)
+                    fastEnvelopeDb = targetGrDb + attackCoeff * (fastEnvelopeDb - targetGrDb);
+                else
+                    fastEnvelopeDb = targetGrDb + fastReleaseCoeff * (fastEnvelopeDb - targetGrDb);
 
-            // Stage 2: Slow program-dependent recovery (user release)
-            if (targetGrDb < slowEnvelopeDb)
-                slowEnvelopeDb = targetGrDb + attackCoeff * (slowEnvelopeDb - targetGrDb);
-            else
-                slowEnvelopeDb = targetGrDb + slowReleaseCoeff * (slowEnvelopeDb - targetGrDb);
+                if (targetGrDb < slowEnvelopeDb)
+                    slowEnvelopeDb = targetGrDb + attackCoeff * (slowEnvelopeDb - targetGrDb);
+                else
+                    slowEnvelopeDb = targetGrDb + slowReleaseCoeff * (slowEnvelopeDb - targetGrDb);
 
-            // Composite optical gain reduction
-            const float grDb = 0.5f * (fastEnvelopeDb + slowEnvelopeDb);
+                grDb = 0.5f * (fastEnvelopeDb + slowEnvelopeDb);
+            }
+            else if (curMode == 1) // VCA
+            {
+                if (targetGrDb < vcaEnvelopeDb)
+                    vcaEnvelopeDb = targetGrDb + attackCoeff * (vcaEnvelopeDb - targetGrDb);
+                else
+                    vcaEnvelopeDb = targetGrDb + slowReleaseCoeff * (vcaEnvelopeDb - targetGrDb);
+                grDb = vcaEnvelopeDb;
+            }
+            else // FET
+            {
+                if (targetGrDb < fetEnvelopeDb)
+                    fetEnvelopeDb = targetGrDb + attackCoeff * (fetEnvelopeDb - targetGrDb);
+                else
+                    fetEnvelopeDb = targetGrDb + slowReleaseCoeff * (fetEnvelopeDb - targetGrDb);
+                grDb = fetEnvelopeDb;
+            }
             blockPeakGrDb = juce::jmin(blockPeakGrDb, grDb);
 
             const float compGain = juce::Decibels::decibelsToGain(grDb) * autoMakeupLinear;
@@ -252,6 +324,7 @@ void CompressorDSP::process(ProcessContext& ctx) noexcept
 
     gainReductionDb.store(blockPeakGrDb, std::memory_order_relaxed);
     saturationActivity.store(blockSaturated ? 1.0f : 0.0f, std::memory_order_relaxed);
+    ctx.cumulativeGainReductionDb += blockPeakGrDb;
 }
 
 void CompressorDSP::randomize(juce::Random& rng)
