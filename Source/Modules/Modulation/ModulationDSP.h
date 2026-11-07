@@ -56,7 +56,8 @@ inline const juce::StringArray& getModTargetNames()
         "Magic EQ Tune",
         "Comp Amount",
         "Master Mix",
-        "LFO 2 Rate"
+        "LFO 2 Rate",
+        "Master Vol"
     };
     return names;
 }
@@ -64,7 +65,7 @@ inline const juce::StringArray& getModTargetNames()
 class ModulationDSP : public IDSPModule
 {
 public:
-    static constexpr int numTargets = 21;
+    static constexpr int numTargets = 22;
 
     explicit ModulationDSP(juce::String prefix = "mod");
     ~ModulationDSP() override = default;
@@ -100,9 +101,10 @@ public:
     [[nodiscard]] float getLfo2Phase() const noexcept { return currentLfo2PhaseNorm.load(std::memory_order_relaxed); }
 
     // Direct control update for testing
-    void updateBlockControl(double bpm, int numSamples) noexcept;
+    void updateBlockControl(double bpm, int numSamples, double ppq = 0.0, bool isPlaying = false) noexcept;
 
 private:
+    [[nodiscard]] double getSyncedCycleBeats(int divIndex) const noexcept;
     [[nodiscard]] float getSyncedRateHz(int divIndex, double bpm) const noexcept;
     [[nodiscard]] float evaluateLfo(double phase, int wave, float shCurr, float shNext) noexcept;
     void advanceLfoPhase(double& phase, float rateHz, int samples, int wave, float& shCurr, float& shNext) noexcept;

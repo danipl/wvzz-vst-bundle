@@ -4,6 +4,7 @@
 
 # Build & Compilation Artifacts
 build/
+dist/
 cmake-build-*/
 DerivedData/
 

@@ -96,22 +96,27 @@ void ModulationDSP::reset() noexcept
     targetOffsetsCurrent.fill(0.0f);
 }
 
-float ModulationDSP::getSyncedRateHz(int divIndex, double bpm) const noexcept
+double ModulationDSP::getSyncedCycleBeats(int divIndex) const noexcept
 {
-    const double safeBpm = (bpm > 20.0 && bpm < 400.0) ? bpm : 120.0;
-    const double beatSec = 60.0 / safeBpm;
-
     static constexpr double divBeats[8] = {
         16.0, 8.0, 4.0, 2.0, 1.0, 0.5, 0.25, 0.125
     };
 
-    const int baseDiv = divIndex % 8;
-    const int modifier = divIndex / 8; // 0: Normal, 1: Dotted, 2: Triplet
+    const int baseDiv = std::clamp(divIndex % 8, 0, 7);
+    const int modifier = std::clamp(divIndex / 8, 0, 2); // 0: Normal, 1: Dotted, 2: Triplet
 
     double beats = divBeats[baseDiv];
     if (modifier == 1)      beats *= 1.5;
     else if (modifier == 2) beats *= (2.0 / 3.0);
 
+    return std::max(1e-4, beats);
+}
+
+float ModulationDSP::getSyncedRateHz(int divIndex, double bpm) const noexcept
+{
+    const double safeBpm = (bpm > 20.0 && bpm < 400.0) ? bpm : 120.0;
+    const double beatSec = 60.0 / safeBpm;
+    const double beats = getSyncedCycleBeats(divIndex);
     const double periodSec = beats * beatSec;
     return static_cast<float>(1.0 / std::max(1e-4, periodSec));
 }
@@ -155,11 +160,11 @@ void ModulationDSP::advanceLfoPhase(double& phase, float rateHz, int samples, in
     }
 }
 
-void ModulationDSP::updateBlockControl(double bpm, int numSamples) noexcept
+void ModulationDSP::updateBlockControl(double bpm, int numSamples, double ppq, bool isPlaying) noexcept
 {
-    hostBpm = bpm;
+    hostBpm = (bpm > 20.0 && bpm < 400.0) ? bpm : 120.0;
 
-    // 1. Calculate LFO 1 Rate
+    // 1. Calculate LFO 1 Rate & Phase
     const int wave1      = (lfo1WaveParam != nullptr) ? static_cast<int>(lfo1WaveParam->load(std::memory_order_relaxed)) : 0;
     const bool sync1     = (lfo1SyncParam != nullptr) && (lfo1SyncParam->load(std::memory_order_relaxed) > 0.5f);
     const float freeRate1= (lfo1RateParam != nullptr) ? lfo1RateParam->load(std::memory_order_relaxed) : 1.0f;
@@ -167,19 +172,37 @@ void ModulationDSP::updateBlockControl(double bpm, int numSamples) noexcept
     const auto target1   = (lfo1TargetParam != nullptr) ? static_cast<ModTarget>(static_cast<int>(lfo1TargetParam->load(std::memory_order_relaxed))) : ModTarget::None;
     const float depth1   = (lfo1DepthParam != nullptr) ? lfo1DepthParam->load(std::memory_order_relaxed) : 0.0f;
 
+    if (sync1 && isPlaying)
+    {
+        const double cycleBeats = getSyncedCycleBeats(syncDiv1);
+        double phaseNorm = std::fmod(ppq / cycleBeats, 1.0);
+        if (phaseNorm < 0.0)
+            phaseNorm += 1.0;
+        lfo1Phase = phaseNorm * juce::MathConstants<double>::twoPi;
+    }
+
     const float lfo1EffectiveHz = sync1 ? getSyncedRateHz(syncDiv1, hostBpm) : freeRate1;
     const float lfo1Val = evaluateLfo(lfo1Phase, wave1, lfo1ShCurrent, lfo1ShNext);
     const float lfo1ModOutput = lfo1Val * depth1;
 
     advanceLfoPhase(lfo1Phase, lfo1EffectiveHz, numSamples, wave1, lfo1ShCurrent, lfo1ShNext);
 
-    // 2. Calculate LFO 2 Rate
+    // 2. Calculate LFO 2 Rate & Phase
     const int wave2      = (lfo2WaveParam != nullptr) ? static_cast<int>(lfo2WaveParam->load(std::memory_order_relaxed)) : 0;
     const bool sync2     = (lfo2SyncParam != nullptr) && (lfo2SyncParam->load(std::memory_order_relaxed) > 0.5f);
     const float freeRate2= (lfo2RateParam != nullptr) ? lfo2RateParam->load(std::memory_order_relaxed) : 1.0f;
     const int syncDiv2   = (lfo2SyncDivParam != nullptr) ? static_cast<int>(lfo2SyncDivParam->load(std::memory_order_relaxed)) : 4;
     const auto target2   = (lfo2TargetParam != nullptr) ? static_cast<ModTarget>(static_cast<int>(lfo2TargetParam->load(std::memory_order_relaxed))) : ModTarget::None;
     const float depth2   = (lfo2DepthParam != nullptr) ? lfo2DepthParam->load(std::memory_order_relaxed) : 0.0f;
+
+    if (sync2 && isPlaying && target1 != ModTarget::LFO2Rate)
+    {
+        const double cycleBeats = getSyncedCycleBeats(syncDiv2);
+        double phaseNorm = std::fmod(ppq / cycleBeats, 1.0);
+        if (phaseNorm < 0.0)
+            phaseNorm += 1.0;
+        lfo2Phase = phaseNorm * juce::MathConstants<double>::twoPi;
+    }
 
     float lfo2BaseHz = sync2 ? getSyncedRateHz(syncDiv2, hostBpm) : freeRate2;
     if (target1 == ModTarget::LFO2Rate)
@@ -233,7 +256,7 @@ void ModulationDSP::process(ProcessContext& ctx) noexcept
     if (numSamples == 0)
         return;
 
-    updateBlockControl(hostBpm, numSamples);
+    updateBlockControl(ctx.hostBpm, numSamples, ctx.hostPpqPosition, ctx.isHostPlaying);
 
     ctx.modulationOffsets = targetOffsetsCurrent.data();
     ctx.numModulationOffsets = numTargets;

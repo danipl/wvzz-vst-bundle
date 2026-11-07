@@ -26,7 +26,12 @@ public:
     void process(ProcessContext& ctx) noexcept override;
     void randomize(juce::Random& rng) override;
 
-    void setParameters(float amountNorm, float tuneHz, bool phatModeEnabled, bool bypass = false) noexcept;
+    [[nodiscard]] bool isPreDistortion() const noexcept
+    {
+        return preParam != nullptr && preParam->load(std::memory_order_relaxed) > 0.5f;
+    }
+
+    void setParameters(float amountNorm, float tuneHz, bool phatModeEnabled, bool bypass = false, bool pre = false) noexcept;
 
 private:
     void updateCoefficients(float amountVal, float tuneVal) noexcept;
@@ -38,22 +43,25 @@ private:
     std::atomic<float>* amountParam { nullptr };
     std::atomic<float>* tuneParam   { nullptr };
     std::atomic<float>* phatParam   { nullptr };
+    std::atomic<float>* preParam    { nullptr };
 
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> amountSmoothed;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> tuneSmoothed;
 
-    float b0_boost { 1.0f }, b1_boost { 0.0f }, b2_boost { 0.0f };
-    float a1_boost { 0.0f }, a2_boost { 0.0f };
-    float boostS1L { 0.0f }, boostS2L { 0.0f };
-    float boostS1R { 0.0f }, boostS2R { 0.0f };
+    double b0_boost { 1.0 }, b1_boost { 0.0 }, b2_boost { 0.0 };
+    double a1_boost { 0.0 }, a2_boost { 0.0 };
+    double boostS1L { 0.0 }, boostS2L { 0.0 };
+    double boostS1R { 0.0 }, boostS2R { 0.0 };
 
-    float b0_dip { 1.0f }, b1_dip { 0.0f }, b2_dip { 0.0f };
-    float a1_dip { 0.0f }, a2_dip { 0.0f };
-    float dipS1L { 0.0f }, dipS2L { 0.0f };
-    float dipS1R { 0.0f }, dipS2R { 0.0f };
+    double b0_dip { 1.0 }, b1_dip { 0.0 }, b2_dip { 0.0 };
+    double a1_dip { 0.0 }, a2_dip { 0.0 };
+    double dipS1L { 0.0 }, dipS2L { 0.0 };
+    double dipS1R { 0.0 }, dipS2R { 0.0 };
 
-    juce::dsp::IIR::Filter<float> highShelfL;
-    juce::dsp::IIR::Filter<float> highShelfR;
+    double b0_shelf { 1.0 }, b1_shelf { 0.0 }, b2_shelf { 0.0 };
+    double a1_shelf { 0.0 }, a2_shelf { 0.0 };
+    double shelfS1L { 0.0 }, shelfS2L { 0.0 };
+    double shelfS1R { 0.0 }, shelfS2R { 0.0 };
 };
 
 } // namespace wvzz::modules

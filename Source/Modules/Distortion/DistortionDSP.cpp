@@ -24,6 +24,10 @@ void DistortionDSP::registerParameters(juce::AudioProcessorValueTreeState::Param
 
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ paramId("xcita"), 1 }, "Xcita", 0.0f, 1.0f, 0.0f));
+
+    layout.add(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID{ paramId("mode"), 1 }, "Dist Mode",
+        juce::StringArray { "Classic", "Hard Clip", "Wavefold" }, 0));
 }
 
 void DistortionDSP::bindParameters(juce::AudioProcessorValueTreeState& apvts)
@@ -33,6 +37,7 @@ void DistortionDSP::bindParameters(juce::AudioProcessorValueTreeState& apvts)
     tubeParam   = apvts.getRawParameterValue(paramId("tube"));
     bitParam    = apvts.getRawParameterValue(paramId("bit"));
     xcitaParam  = apvts.getRawParameterValue(paramId("xcita"));
+    modeParam   = apvts.getRawParameterValue(paramId("mode"));
 }
 
 void DistortionDSP::prepare(const juce::dsp::ProcessSpec& spec)
@@ -60,14 +65,14 @@ void DistortionDSP::prepare(const juce::dsp::ProcessSpec& spec)
     mechPostFilterL.coefficients = postCoeffs;
     mechPostFilterR.coefficients = postCoeffs;
 
-    // Tube 10 Hz DC blocker
+    // Tube 1st-order 20 Hz DC blocker (avoids 2nd-order float precision collapse at 4x oversampling)
     tubeDcBlockerL.prepare(osSpec);
     tubeDcBlockerR.prepare(osSpec);
-    auto dcCoeffs = juce::dsp::IIR::Coefficients<float>::makeHighPass(osSampleRate, 10.0f);
+    auto dcCoeffs = juce::dsp::IIR::Coefficients<float>::makeFirstOrderHighPass(osSampleRate, 20.0f);
     tubeDcBlockerL.coefficients = dcCoeffs;
     tubeDcBlockerR.coefficients = dcCoeffs;
 
-    // Xcita 2.8 kHz 2-pole Butterworth HPF + 10 Hz DC blocker
+    // Xcita 2.8 kHz 2-pole Butterworth pre-HPF and post-HPF (removes DC + rectified <2.8kHz intermodulation rumble)
     xcitaHpfL.prepare(osSpec);
     xcitaHpfR.prepare(osSpec);
     auto xcitaCoeffs = juce::dsp::IIR::Coefficients<float>::makeHighPass(osSampleRate, 2800.0f, 0.7071f);
@@ -76,8 +81,8 @@ void DistortionDSP::prepare(const juce::dsp::ProcessSpec& spec)
 
     xcitaDcBlockerL.prepare(osSpec);
     xcitaDcBlockerR.prepare(osSpec);
-    xcitaDcBlockerL.coefficients = dcCoeffs;
-    xcitaDcBlockerR.coefficients = dcCoeffs;
+    xcitaDcBlockerL.coefficients = xcitaCoeffs;
+    xcitaDcBlockerR.coefficients = xcitaCoeffs;
 
     const double rampTimeSec = 0.015;
     mechSmoothed.reset(baseSampleRate, rampTimeSec);
@@ -116,7 +121,7 @@ void DistortionDSP::reset() noexcept
     bitHoldCounterR = 0;
 }
 
-void DistortionDSP::setParameters(float mechNorm, float tubeNorm, float bitNorm, float xcitaNorm, bool bypass) noexcept
+void DistortionDSP::setParameters(float mechNorm, float tubeNorm, float bitNorm, float xcitaNorm, bool bypass, int mode) noexcept
 {
     mechSmoothed.setCurrentAndTargetValue(juce::jlimit(0.0f, 1.0f, mechNorm));
     tubeSmoothed.setCurrentAndTargetValue(juce::jlimit(0.0f, 1.0f, tubeNorm));
@@ -124,6 +129,8 @@ void DistortionDSP::setParameters(float mechNorm, float tubeNorm, float bitNorm,
     xcitaSmoothed.setCurrentAndTargetValue(juce::jlimit(0.0f, 1.0f, xcitaNorm));
     if (bypassParam != nullptr)
         bypassParam->store(bypass ? 1.0f : 0.0f, std::memory_order_relaxed);
+    if (modeParam != nullptr)
+        modeParam->store(static_cast<float>(juce::jlimit(0, 2, mode)), std::memory_order_relaxed);
 }
 
 void DistortionDSP::process(ProcessContext& ctx) noexcept
@@ -136,7 +143,10 @@ void DistortionDSP::process(ProcessContext& ctx) noexcept
 
     const bool bypassed = (bypassParam != nullptr) && (bypassParam->load(std::memory_order_relaxed) > 0.5f);
     if (bypassed)
+    {
+        ctx.distortionLatencySamples = 0;
         return;
+    }
 
     if (mechParam != nullptr)  mechSmoothed.setTargetValue(mechParam->load(std::memory_order_relaxed));
     if (tubeParam != nullptr)  tubeSmoothed.setTargetValue(tubeParam->load(std::memory_order_relaxed));
@@ -159,7 +169,10 @@ void DistortionDSP::process(ProcessContext& ctx) noexcept
     const bool hasXcita = (modXcita > 0.001f);
 
     if (!hasMech && !hasTube && !hasBit && !hasXcita)
+    {
+        ctx.distortionLatencySamples = 0;
         return;
+    }
 
     // 1. Bitcrusher at BASE sample rate
     if (hasBit)
@@ -189,9 +202,14 @@ void DistortionDSP::process(ProcessContext& ctx) noexcept
     }
 
     if (!hasMech && !hasTube && !hasXcita)
+    {
+        ctx.distortionLatencySamples = 0;
         return;
+    }
 
-    // 2. 4x Oversampling for Mech, Tube, Xcita
+    ctx.distortionLatencySamples = getLatencyInSamples();
+
+    // 2. 4x Oversampling for Mech, Tube, Xcita with Serial Cascading
     juce::dsp::AudioBlock<float> originalBlock(ctx.mainBuffer);
     auto oversampledBlock = oversampling.processSamplesUp(originalBlock);
 
@@ -199,6 +217,10 @@ void DistortionDSP::process(ProcessContext& ctx) noexcept
     const float mechDrive = std::pow(25.0f, modMech);
     const float tubeDrive = std::pow(15.0f, modTube);
     const float xcitaDrive = 1.0f + modXcita * 9.0f;
+    const int distMode = (modeParam != nullptr) ? std::clamp(static_cast<int>(modeParam->load(std::memory_order_relaxed)), 0, 2) : 0;
+
+    const float mechMix = std::sqrt(modMech);
+    const float tubeMix = std::sqrt(modTube);
 
     for (int ch = 0; ch < numChannels; ++ch)
     {
@@ -212,12 +234,12 @@ void DistortionDSP::process(ProcessContext& ctx) noexcept
 
         for (int i = 0; i < osNumSamples; ++i)
         {
-            const float dry = osData[i];
-            float out = dry;
+            float x = osData[i];
 
+            // Serial Stage 1: Mech Saturation
             if (hasMech)
             {
-                const float pre = preFilt.processSample(dry);
+                const float pre = preFilt.processSample(x);
                 const float dx = mechDrive * pre;
                 float shaped = 0.0f;
 
@@ -227,28 +249,47 @@ void DistortionDSP::process(ProcessContext& ctx) noexcept
                     shaped = juce::jlimit(-0.9f, 0.0f, dx * 1.2f);
 
                 const float mechOut = postFilt.processSample(shaped);
-                out += mechOut * (modMech * 0.5f);
+                x = (1.0f - mechMix) * x + mechMix * mechOut;
             }
 
+            // Serial Stage 2: Tube Saturation
             if (hasTube)
             {
-                const float x = dry;
                 const float x2 = x * x;
                 const float rawTube = std::tanh(tubeDrive * x + 0.1f * x2) - std::tanh(0.1f * x2);
                 const float tubeBlocked = tubeDc.processSample(rawTube);
-                out += tubeBlocked * (modTube * 0.6f);
+                x = (1.0f - tubeMix) * x + tubeMix * tubeBlocked;
             }
 
+            // Character waveshaping mode (Hard Clip or Wavefold)
+            if (hasMech || hasTube)
+            {
+                if (distMode == 1) // Hard Clip
+                {
+                    const float clipDrive = 1.0f + 1.5f * std::max(modMech, modTube);
+                    x = juce::jlimit(-0.95f, 0.95f, x * clipDrive);
+                }
+                else if (distMode == 2) // Wavefold
+                {
+                    const float foldGain = 1.0f + 3.0f * std::max(modMech, modTube);
+                    const float folded = std::sin(x * foldGain);
+                    const float foldMix = 0.7f * std::max(modMech, modTube);
+                    x = (1.0f - foldMix) * x + foldMix * folded;
+                }
+            }
+
+            // Serial Stage 3: Xcita Harmonics
             if (hasXcita)
             {
-                const float xHf = xcitaHpf.processSample(dry);
+                const float xHf = xcitaHpf.processSample(x);
                 const float rectified = 0.7f * xHf + 0.3f * std::abs(xHf);
                 const float excited = std::tanh(xcitaDrive * rectified);
                 const float xcitaBlocked = xcitaDc.processSample(excited);
-                out += xcitaBlocked * (modXcita * 0.4f);
+                x += xcitaBlocked * (modXcita * 0.4f);
             }
 
-            osData[i] = out;
+            // Soft-knee safety limiter inside oversampling block
+            osData[i] = std::tanh(x * 0.75f) * 1.333f;
         }
     }
 

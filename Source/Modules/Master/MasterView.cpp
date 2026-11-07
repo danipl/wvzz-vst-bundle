@@ -41,6 +41,21 @@ MasterView::MasterView(juce::AudioProcessorValueTreeState& apvts,
     initRotary(mixKnob, paramId("mix"), "Dry/Wet", ui::WvZzLookAndFeel::neonGreen);
     initRotary(volKnob, paramId("vol"), "Volume", ui::WvZzLookAndFeel::neonGreen);
 
+    // Pill toggles: CLIP and MONO (<120Hz)
+    clipToggle.button.setButtonText("CLIP");
+    clipToggle.button.getProperties().set("isPill", true);
+    clipToggle.button.getProperties().set("accentColor", static_cast<int>(ui::WvZzLookAndFeel::neonGreen.getARGB()));
+    clipToggle.attachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+        apvtsState, paramId("clip"), clipToggle.button);
+    addAndMakeVisible(clipToggle.button);
+
+    monoBassToggle.button.setButtonText("MONO");
+    monoBassToggle.button.getProperties().set("isPill", true);
+    monoBassToggle.button.getProperties().set("accentColor", static_cast<int>(ui::WvZzLookAndFeel::neonGreen.getARGB()));
+    monoBassToggle.attachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+        apvtsState, paramId("mono_bass"), monoBassToggle.button);
+    addAndMakeVisible(monoBassToggle.button);
+
     // Stereo VU Meters
     if (inMeter != nullptr)
     {
@@ -100,6 +115,11 @@ void MasterView::resized()
     vuArea.removeFromLeft(4);
     if (outputMeter != nullptr)
         outputMeter->setBounds(vuArea);
+
+    auto topPillRow = content.removeFromTop(18);
+    clipToggle.button.setBounds(topPillRow.removeFromRight(44).reduced(0, 1));
+    topPillRow.removeFromRight(4);
+    monoBassToggle.button.setBounds(topPillRow.removeFromRight(48).reduced(0, 1));
 
     auto layoutKnob = [](RotaryControl& rc, juce::Rectangle<int> r) {
         int labelH = 14;

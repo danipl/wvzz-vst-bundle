@@ -98,6 +98,14 @@ void WvZzDistortionAudioProcessor::setCurrentProgram(int index)
     if (index >= 0 && index < static_cast<int>(presets.size()))
     {
         currentProgramIndex = index;
+
+        // Reset all parameters to canonical defaults first so previous preset values never leak
+        for (auto* param : getParameters())
+        {
+            if (param != nullptr)
+                param->setValueNotifyingHost(param->getDefaultValue());
+        }
+
         const auto& p = presets[static_cast<size_t>(index)];
         for (const auto& [paramId, val] : p.values)
         {
@@ -189,20 +197,29 @@ void WvZzDistortionAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer
 
     // Host Tempo Query
     double bpm = 120.0;
+    double ppqPos = 0.0;
+    bool isPlaying = false;
     if (auto* playHead = getPlayHead())
     {
         if (auto pos = playHead->getPosition())
         {
             if (pos->getBpm().hasValue())
                 bpm = *pos->getBpm();
+            if (pos->getPpqPosition().hasValue())
+                ppqPos = *pos->getPpqPosition();
+            isPlaying = pos->getIsPlaying();
         }
     }
 
     // Process in sub-blocks of up to 32 samples for control-rate modulation
     int samplesProcessed = 0;
+    const double sampleRateVal = getSampleRate() > 0.0 ? getSampleRate() : 44100.0;
+    const double beatsPerSample = (bpm / 60.0) / sampleRateVal;
+
     while (samplesProcessed < numSamples)
     {
         const int subBlockSize = std::min(32, numSamples - samplesProcessed);
+        const double subBlockPpq = ppqPos + static_cast<double>(samplesProcessed) * beatsPerSample;
 
         // Audio views for this sub-block
         juce::AudioBuffer<float> subIn(buffer.getArrayOfWritePointers(), 2, samplesProcessed, subBlockSize);
@@ -230,7 +247,11 @@ void WvZzDistortionAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer
             subRej,
             hasAuxSplit,
             nullptr,
-            0
+            0,
+            bpm,
+            subBlockPpq,
+            isPlaying,
+            distModule.getDistortionDSP().getLatencyInSamples()
         };
 
         // 1. Modulation Engine computes offsets
@@ -239,20 +260,30 @@ void WvZzDistortionAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer
         // 2. Band-pass Filter (Splits rejected energy into subRej and flags hasAuxSplit)
         bpModule.getDSP().process(ctx);
 
-        // 3. Distortion Module (4-stage saturator)
+        const bool meqIsPre = meqModule.getMagicEQDSP().isPreDistortion();
+        if (meqIsPre)
+        {
+            // Magic EQ in Pre-Distortion mode (Hardstyle kick tok resonant push)
+            meqModule.getDSP().process(ctx);
+        }
+
+        // 3. Distortion Module (4-stage serial saturator)
         distModule.getDSP().process(ctx);
 
         // 4. Multi-Mode Filter (Uses subPreBp envelope follower)
         mmModule.getDSP().process(ctx);
 
-        // 5. Band-pass Recombination (Passband + Rejected Band * BR Mix)
+        // 5. Band-pass Recombination (Passband + Rejected Band * BR Mix, oversampling delayed)
         bpModule.getBPFilterDSP().recombine(ctx);
 
         // 6. Flanger Module
         flgModule.getDSP().process(ctx);
 
-        // 7. Magic EQ
-        meqModule.getDSP().process(ctx);
+        // 7. Magic EQ (Standard post-flanger mode)
+        if (!meqIsPre)
+        {
+            meqModule.getDSP().process(ctx);
+        }
 
         // 8. Compressor
         compModule.getDSP().process(ctx);

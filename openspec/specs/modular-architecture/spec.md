@@ -14,15 +14,15 @@ The architecture SHALL encapsulate audio processing modules through a segregated
 - **THEN** audio processing and parameter binding operate without requiring any GUI component allocation or display server connection
 
 ### Requirement: Unified ProcessContext Audio and Modulation Routing
-The DSP processing pipeline SHALL pass a pre-allocated `ProcessContext` structure to every module's `process()` method. The context SHALL provide direct access to the main stereo audio buffer, read-only pre-split sidechain input, auxiliary band-reject buffer, and a dynamic modulation offset lookup function (`getModulationOffset`).
+The DSP processing pipeline SHALL pass a pre-allocated `ProcessContext` structure to every module's `process()` method. The context SHALL provide direct access to the main stereo audio buffer, read-only pre-split sidechain input, auxiliary band-reject buffer, a dynamic modulation offset lookup function (`getModulationOffset`), live host transport state (`bpm`, `ppqPosition`, `isPlaying`), and active distortion oversampling latency (`distortionLatencySamples`).
 
 #### Scenario: Auxiliary audio bus exchange
-- **WHEN** a filter splitter module outputs rejected frequency bands into the auxiliary band-reject buffer
-- **THEN** downstream summation stages recombine the auxiliary buffer with the main audio path without thread locks or dynamic buffer reallocations
+- **WHEN** a filter splitter module outputs rejected frequency bands into the auxiliary band-reject buffer and downstream oversampled distortion introduces group delay
+- **THEN** downstream summation stages delay and recombine the auxiliary buffer with the main audio path using `distortionLatencySamples` without thread locks or dynamic buffer reallocations
 
 #### Scenario: Dynamic modulation target lookup
-- **WHEN** modulation sources (LFOs or X/Y pads) modulate an active parameter
-- **THEN** the target module resolves its modulation offset from the `ProcessContext` and applies it to its internal smoothed target value in real time
+- **WHEN** modulation sources (LFOs or X/Y pads) evaluate synced rates and target offsets
+- **THEN** the modulation module reads `bpm`, `ppqPosition`, and `isPlaying` from `ProcessContext` and populates modulation offsets for all downstream modules in real time
 
 ### Requirement: Namespaced Parameter IDs and Multi-Instance Support
 Each audio module SHALL accept a configurable instance prefix (defaulting to its canonical prefix such as `dist`, `bp`, `mm`, `flg`, `meq`, `comp`, `mod`, or `master`). All registered parameter IDs, value tree identifiers, and UI attachments SHALL prepend this prefix, allowing multiple instances of the same module class to operate concurrently within a single host processor without identifier collisions.

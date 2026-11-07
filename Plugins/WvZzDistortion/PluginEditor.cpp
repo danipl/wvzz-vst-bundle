@@ -133,6 +133,14 @@ void WvZzDistortionAudioProcessorEditor::timerCallback()
     if (presetSelector.getSelectedId() != currentProg + 1)
         presetSelector.setSelectedId(currentProg + 1, juce::dontSendNotification);
 
+    // Dynamic signal flow indicator based on Magic EQ pre-distortion routing
+    const bool meqIsPre = audioProcessor.getMagicEQModule().getMagicEQDSP().isPreDistortion();
+    const juce::String flowText = meqIsPre
+        ? "BP \u2192 EQ \u2192 DIST \u2192 MM+BR \u2192 FLG \u2192 COMP \u2192 MASTER"
+        : "BP \u2192 DIST \u2192 MM+BR \u2192 FLG \u2192 EQ \u2192 COMP \u2192 MASTER";
+    if (signalFlowLabel.getText() != flowText)
+        signalFlowLabel.setText(flowText, juce::dontSendNotification);
+
     // Call updateVisuals() on all 8 views
     if (bpView)     bpView->updateVisuals();
     if (distView)   distView->updateVisuals();

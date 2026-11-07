@@ -32,6 +32,15 @@ DistortionView::DistortionView(juce::AudioProcessorValueTreeState& apvts,
         addAndMakeVisible(*helpButton);
     }
 
+    // Mode Selector (Classic / Clip / Fold)
+    modeSelector.box.addItem("Classic", 1);
+    modeSelector.box.addItem("Hard Clip", 2);
+    modeSelector.box.addItem("Wavefold", 3);
+    modeSelector.box.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(modeSelector.box);
+    modeSelector.attachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+        apvtsState, paramId("mode"), modeSelector.box);
+
     // Rotary Knobs: Mech, Tube, Bitcrush, Xcita
     initRotary(mechKnob, paramId("mech"), "Mech", ui::WvZzLookAndFeel::neonAmber);
     initRotary(tubeKnob, paramId("tube"), "Tube", ui::WvZzLookAndFeel::neonAmber);
@@ -69,6 +78,10 @@ void DistortionView::resized()
         helpButton->setBounds(card.getHeaderHelpBounds());
 
     auto content = card.getContentBounds();
+
+    auto modeArea = content.removeFromTop(20);
+    modeSelector.box.setBounds(modeArea.reduced(24, 0));
+    content.removeFromTop(2);
 
     auto layoutKnob = [](RotaryControl& rc, juce::Rectangle<int> r) {
         int labelH = 14;

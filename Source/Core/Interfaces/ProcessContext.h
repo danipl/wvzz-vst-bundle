@@ -5,7 +5,7 @@
 namespace wvzz {
 
 /**
- * @brief 21-item Modulatable Targets Enum.
+ * @brief 22-item Modulatable Targets Enum.
  */
 enum class ModTarget : int
 {
@@ -29,7 +29,8 @@ enum class ModTarget : int
     MagicEQTune,
     CompAmount,
     MasterMix,
-    LFO2Rate
+    LFO2Rate,
+    MasterVol
 };
 
 /**
@@ -45,6 +46,11 @@ struct ProcessContext
 
     const float* modulationOffsets = nullptr;
     int numModulationOffsets = 0;
+
+    double hostBpm = 120.0;
+    double hostPpqPosition = 0.0;
+    bool isHostPlaying = false;
+    int distortionLatencySamples = 0;
 
     /**
      * @brief O(1) lock-free modulation offset lookup by integer index.

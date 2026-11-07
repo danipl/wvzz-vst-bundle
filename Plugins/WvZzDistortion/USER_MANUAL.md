@@ -86,8 +86,8 @@ The interface uses a clean, responsive vector layout designed around a 3-column 
 ### Top Header Bar
 
 - **WvZz Vector Monogram**: Scalable brand badge.
-- **Signal Flow Summary**: Visual breadcrumb path showing the serial audio chain: `BP ➔ DIST ➔ MM + BR ➔ FLG ➔ EQ ➔ COMP ➔ MASTER`.
-- **Preset Selector**: Choose from 10 factory presets or step through them using the `<` and `>` buttons.
+- **Signal Flow Summary**: Visual breadcrumb path showing the serial audio chain: `BP ➔ DIST ➔ MM + BR ➔ FLG ➔ EQ ➔ COMP ➔ MASTER` (or `BP ➔ EQ ➔ DIST ➔ MM + BR ➔ FLG ➔ COMP ➔ MASTER` when Magic EQ is in Pre-Distortion mode).
+- **Preset Selector**: Choose from 15 factory presets or step through them using the `<` and `>` buttons.
 - **Dice (Smart Randomizer)**: Randomizes parameters across all active modules within musical bounds without destabilizing filters or triggering harsh feedback.
 - **Master Bypass**: Globally bypasses all processing stages, letting the dry input pass directly to the output.
 
@@ -113,15 +113,18 @@ The BP Filter isolates the frequency band that will feed the Distortion and MM F
 
 ### Distortion Unit
 
-Four parallel, non-linear saturation circuits running inside a 4x oversampled polyphase pipeline.
+Multi-mode non-linear saturation running in a serial cascaded topology inside a 4x oversampled polyphase pipeline.
 
 | Parameter | Range | Default | Description |
 | :--- | :--- | :--- | :--- |
 | **Bypass (`dist_bypass`)** | On / Off | Off (Active) | Bypasses the distortion stage. |
-| **Mech (`dist_mech`)** | 0% – 100% | 0% | Harsh, industrial wavefolding and odd-harmonic clipping. Great for heavy synths and snares. |
-| **Tube (`dist_tube`)** | 0% – 100% | 0% | Warm vacuum tube saturation generating musical even harmonics. Adds body and analog thickness. |
+| **Mode (`dist_mode`)** | Classic / Hard Clip / Wavefold | Classic | Selects distortion algorithm: **Classic** (smooth arctan soft clipping), **Hard Clip** (brickwall clipping at ±1.0 for aggressive EDM/Hardstyle edge), or **Wavefold** (mathematical sine wavefolding for metallic screeches). |
+| **Mech (`dist_mech`)** | 0% – 100% | 0% | Industrial clipping drive. In Classic mode, applies odd-harmonic saturation; in Hard Clip mode, pushes signals hard against the ±1.0 boundary; in Wavefold mode, determines folding recursion depth. |
+| **Tube (`dist_tube`)** | 0% – 100% | 0% | Warm vacuum tube saturation generating musical even harmonics. Adds body and analog thickness before subsequent clipping stages. |
 | **Bit (`dist_bit`)** | 0% – 100% | 0% | Dynamic digital bitcrushing (reduces bit depth from 16-bit to 2-bit). Gritty digital texture. |
 | **Xcita (`dist_xcita`)** | 0% – 100% | 0% | High-frequency psychoacoustic exciter. Adds brightness, presence, and air without harshness. |
+
+> **Cascaded Topology**: The distortion unit cascades from **Tube Drive** into **Mech Drive (or selected Mode)**, followed by **Bitcrush** and **Exciter**. This allows smooth pre-warming from Tube before slamming into Hard Clip or Wavefold.
 
 ---
 
@@ -172,13 +175,14 @@ Stereo fractional delay flanger with a 90° quadrature LFO.
 
 ### Magic EQ
 
-A low-frequency enhancer that injects solid weight into kicks and basslines.
+A low-frequency enhancer that injects solid weight into kicks and basslines, or creates aggressive kick "tok" transients.
 
 | Parameter | Range | Default | Description |
 | :--- | :--- | :--- | :--- |
 | **Bypass (`meq_bypass`)** | On / Off | Off (Active) | Bypasses Magic EQ. |
+| **Pre (`meq_pre`)** | On / Off | Off (Post) | Toggles Pre-Distortion EQ routing. When ON, routes Magic EQ before the Distortion unit to overdrive specific bass fundamentals (producing Hardstyle kick "tok" transients). When OFF, routes post-distortion for clean low-end enhancement. |
 | **Amount (`meq_amount`)** | 0% – 100% | 0% | Boost intensity of the sub-bass resonator. |
-| **Tune (`meq_tune`)** | 60 Hz – 120 Hz | 80 Hz | Target fundamental sub frequency. Automatically cuts $2 \times \text{tune}$ to avoid boxy low-mid buildup. |
+| **Tune (`meq_tune`)** | 45 Hz – 180 Hz | 80 Hz | Target fundamental sub frequency. Automatically cuts $2 \times \text{tune}$ to avoid boxy low-mid buildup. Extended range supports low sub-bass (45 Hz) up to upper-bass punch (180 Hz). |
 | **Phat (`meq_phat`)** | On / Off | Off | Adds warm harmonic saturation to the sub frequencies. |
 
 ---
@@ -201,7 +205,7 @@ One-knob dynamic leveling with auto-makeup gain and real-time gain reduction met
 The center panel features two views switchable via top tabs:
 1. **X/Y Controller Pad**:
    - **Puck**: Click and drag to modulate two targets simultaneously.
-   - **X Target / Y Target**: Choose any of the 21 modulatable targets from the dropdown lists.
+   - **X Target / Y Target**: Choose any of the 22 modulatable targets (including **Master Vol**) from the dropdown lists.
    - **X Depth / Y Depth**: Bipolar depth controls (-100% to +100%) setting the influence of pad movement.
 2. **Signal Visualizer**:
    - Real-time comparison display showing waveform or spectrum changes across the processing chain.
@@ -215,19 +219,21 @@ Two independent low-frequency oscillators designed for rhythmic movement.
 | Parameter | Range | Default | Description |
 | :--- | :--- | :--- | :--- |
 | **Waveform** | 7 Types | Sine | Sine, Triangle, Saw Up, Saw Down, Square, Sample & Hold, Random Smooth. |
-| **Sync** | Free / Sync | Free | Free running in Hertz or locked to DAW host tempo subdivisions. |
+| **Sync** | Free / Sync | Free | Free running in Hertz or locked to DAW host tempo subdivisions. When DAW playback starts, the LFO phase locks precisely to host quarter-note (PPQ) beat positions for jitter-free rhythmic drops. |
 | **Rate** | 0.05 – 20 Hz / 1/32 – 8 bars | 1.0 Hz | Speed of modulation. |
 | **Depth** | -100% – +100% | 0% | Bipolar modulation depth. |
-| **Target** | 21 Targets | None | Parameter modulated by this LFO. |
+| **Target** | 22 Targets | None | Parameter modulated by this LFO (including Master Volume). |
 
 ---
 
 ### Master Section & Output
 
 - **Input Gain (`input_gain`)**: -24 dB to +24 dB trim before entering any processing stages.
-- **Dry/Wet Mix (`master_mix`)**: 0% (pure dry) to 100% (fully processed). The dry path is phase-aligned via a 24-sample circular delay line.
-- **Output Volume (`master_volume`)**: -36 dB to +12 dB output attenuation or boost.
-- **Safety Hard Clipper**: Limits peaks at -0.1 dBFS to eliminate harsh digital wrap-around clipping.
+- **Dry/Wet Mix (`master_mix`)**: 0% (pure dry) to 100% (fully processed). The dry path is phase-aligned via a dynamic delay buffer matching the 4x polyphase oversampling latency.
+- **Output Volume (`master_volume`)**: -36 dB to +12 dB output attenuation or boost. Fully modulatable via LFOs and the X/Y pad.
+- **Mono Bass (`master_mono_bass`)**: Toggles a 120 Hz zero-delay feedback SVF crossover that sums frequencies below 120 Hz to mono while leaving wide stereo information intact above 120 Hz. Vital for club sound system compatibility.
+- **Master Clipper (`master_clip`)**: Engaging `CLIP` enables a 0.0 dBFS hard peak clipper that squares off transients for maximum loudness and eliminates inter-sample clipping on EDM master buses.
+- **Click-Free Bypass**: Master bypass employs a 10 ms linear crossfade buffer to eliminate audio pops and clicks during live DAW automation.
 - **Stereo VU & Peak Meters**: Dual high-precision visual meters showing input and output signal dynamics.
 
 ---
@@ -240,31 +246,44 @@ Understanding the signal flow allows you to harness the full potential of WvZz D
 [Input Gain]
      │
      ▼
-[BP Filter] ─────────── (Auxiliary Rejected Bus: Frequencies outside passband)
+[BP Filter] ─────────── (Auxiliary Band-Reject Bus: Frequencies outside passband)
      │                                                      │
-     ▼ (Passband Audio)                                     │
-[Distortion Unit]                                           │
+     ├──────────────────────────┐                           │
+     │ (Normal Routing)         │ (meq_pre = 1)             │
+     │                          ▼                           │
+     │                    [Magic EQ]                        │
+     │                          │                           │
+     ▼                          ▼                           │
+[Distortion Unit (Tube ➔ Mech/Mode ➔ Bit ➔ Xcita)]          │
      │                                                      │
      ▼                                                      │
 [MM Filter]                                                 │
      │                                                      │
      ▼                                                      │
 [Summing Node] ◄────────────────────────────────────────────┘ (Multiplied by BR Mix)
-     │
+     │                                                        (Delayed to match oversampler)
      ▼
 [Stereo Flanger]
      │
-     ▼
-[Magic EQ]
-     │
-     ▼
+     ├──────────────────────────┐
+     │ (Normal Routing)         │ (meq_pre = 1: Bypassed here)
+     ▼                          │
+[Magic EQ]                      │
+     │                          │
+     ▼ ◄────────────────────────┘
 [Compressor]
      │
      ▼
-[Dry/Wet Blender] ◄─── [24-sample Delayed Dry Signal]
+[Dry/Wet Blender] ◄─── [Latency-Compensated Dry Signal]
      │
      ▼
-[Output Volume & Safety Clip]
+[Sub-Bass Mono Maker (120 Hz ZDF SVF Crossover, if MONO active)]
+     │
+     ▼
+[Master Clipper (0.0 dBFS Hard Clip, if CLIP active)]
+     │
+     ▼
+[Output Volume & 10ms Click-Free Bypass Crossfade]
      │
      ▼
 [Stereo Output]
@@ -274,7 +293,7 @@ Understanding the signal flow allows you to harness the full potential of WvZz D
 
 ## 5. Factory Presets Guide
 
-WvZz Distortion ships with 10 carefully designed factory presets:
+WvZz Distortion ships with 15 carefully designed factory presets covering multiple production genres:
 
 1. **Neuro Reese Mangler**: Heavy mechanical and tube distortion with aggressive envelope-follower modulation on a 24dB low-pass filter. Perfect for drum & bass and dubstep reese basses.
 2. **Phat Breakbeat Smash**: Phat compression mode paired with subtle tube drive and a touch of Magic EQ sub boost. Instantly fattens vintage drum loops.
@@ -286,6 +305,11 @@ WvZz Distortion ships with 10 carefully designed factory presets:
 8. **Talking Vowel Wobble**: Formant filter modulated by an LFO morphing between vowels for vowel-talk basslines.
 9. **Metallic RingMod Perc**: High-speed ring modulation and mechanical wavefolding for transforming percussion into industrial hits.
 10. **Wide Quadrature Flanger**: 90° out-of-phase stereo delay modulation for rich dimensional widening without center-channel cancellation.
+11. **Hardstyle Rawstyle Kick**: Pre-Distortion Magic EQ tuned to 60 Hz pushing into brickwall Hard Clip mode, with sub-bass mono collapse and master peak clipping. The definitive Hardstyle kick engine.
+12. **Euphoric Lead Thickener**: Warm tube pre-drive cascading into vocal formant filtering and 90° quadrature flanging for massive stadium lead supersaws.
+13. **Hardcore Frenchcore Tok**: Pre-Distortion Magic EQ tuned to 120 Hz driving high-intensity Wavefold distortion and a steep 12dB high-pass filter for piercing transient punch.
+14. **BigRoom Festival Drop**: Hard Clip mode, parallel BP band-reject sub preservation, aggressive Phat compression, and master clipping for festival-ready drop kicks.
+15. **PsyTrance Rolling Bass**: Tempo-sync'd LFO modulating the BP Filter low cut corner with sub-bass mono summing enabled for punchy, rolling basslines.
 
 ---
 

@@ -48,6 +48,7 @@ private:
     RotaryControl amountKnob;
     RotaryControl tuneKnob;
     ToggleControl phatToggle;
+    ToggleControl preToggle;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MagicEQView)
 };
