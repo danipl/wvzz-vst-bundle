@@ -60,15 +60,19 @@ The plugin editor SHALL open at a default resolution of `1080 x 680 px` and supp
 - **THEN** the editor scales and centers the `1080 x 680` layout smoothly within the `810 x 510` to `1920 x 1200` bounds without control overlap or clipping
 
 ### Requirement: Live LFO Waveform Visualizers and Gain Reduction Meter
-The UI system SHALL render live waveform and phase visualizers in the LFO 1 and LFO 2 sub-panels, a vertical passband shading indicator between the BP Filter dual vertical cutoff sliders that accurately follows the non-linear slider skew curves, glowing `PHAT` pill toggles for Magic EQ and Compressor Phat modes, a Compressor real-time gain-reduction dB meter, and a header `Dice` randomizer button.
+The UI system SHALL render live waveform and phase visualizers in the LFO 1 and LFO 2 sub-panels, a vertical passband shading indicator between the BP Filter dual vertical cutoff sliders, glowing `PHAT` pill toggles for Magic EQ and Compressor Phat modes, a header `Dice` randomizer button, and a Compressor visualizer featuring a 5-knob layout (`Threshold`, `Ratio`, `Attack`, `Release`, `Mix`), calibrated decibel scale tick marks (`0`, `-3`, `-6`, `-12`, `-18`, `-24 dB`), analog meter ballistics with a floating peak-hold line, a dynamic numeric decibel readout, and visual saturation glow on Phat clipping.
 
 #### Scenario: Visual feedback during modulation and compression
 - **WHEN** audio is compressed and LFO 1/2 are running
-- **THEN** the LFO sub-panels animate the active oscillator waveform and phase while the Compressor gain-reduction meter displays real-time attenuation in dB
+- **THEN** the LFO sub-panels animate the active oscillator waveform and phase while the Compressor meter displays real-time attenuation in dB with calibrated scale marks, smooth ballistic decay, and a floating peak-hold indicator
 
 #### Scenario: Passband visualizer slider tracking
 - **WHEN** user moves either the Low Cut or High Cut vertical slider
 - **THEN** the passband shaded rectangle updates smoothly matching the physical slider thumbs on the non-linear logarithmic scale without vertical inversion or offset error
+
+#### Scenario: Calibrated compressor metering and numeric readout
+- **WHEN** audio compression occurs in the Compressor module
+- **THEN** the GR meter animates with rapid descent and smooth fallback across the calibrated `-24 dB` scale, and the numeric readout updates with the active gain reduction value
 
 ### Requirement: Unified Vector Brand Logo Display
 The UI system SHALL provide a scalable vector logo component (`WvZzLogoComponent`) in the top header bar rendering the geometric WvZz brand waveform monogram and plugin subtitle using resolution-independent vector paths (`juce::Path`), scaling sharply across 75% to 200% window dimensions.

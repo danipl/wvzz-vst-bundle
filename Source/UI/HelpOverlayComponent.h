@@ -26,13 +26,42 @@ public:
 
     ~HelpOverlayComponent() override = default;
 
+    static juce::TextLayout createOverviewLayout(const juce::String& text, float maxWidth)
+    {
+        juce::AttributedString attr;
+        attr.append(text, juce::FontOptions(12.5f, juce::Font::plain), CamelPhatLookAndFeel::textPrimary);
+        attr.setWordWrap(juce::AttributedString::WordWrap::byWord);
+        attr.setJustification(juce::Justification::topLeft);
+
+        juce::TextLayout layout;
+        layout.createLayout(attr, maxWidth);
+        return layout;
+    }
+
     void displayTopic(const HelpTopic& topic, juce::Rectangle<int> targetScreenBounds, juce::Component* parentContainer)
     {
         currentTopic = topic;
         setVisible(true);
 
-        const int cardWidth = 340;
-        const int cardHeight = 160 + static_cast<int>(topic.parameterTips.size()) * 26;
+        const int cardWidth = 360;
+        const float contentWidth = static_cast<float>(cardWidth - 28);
+
+        auto overviewLayout = createOverviewLayout(topic.overview, contentWidth);
+        const float overviewH = std::ceil(overviewLayout.getHeight());
+
+        int baseHeight = 32 + 16;
+        if (topic.signalRole.isNotEmpty())
+            baseHeight += 24;
+
+        constexpr float gapBetweenOverviewAndList = 10.0f;
+        const int tipsCount = static_cast<int>(topic.parameterTips.size());
+        constexpr int tipRowHeight = 24;
+
+        const int cardHeight = baseHeight
+                             + static_cast<int>(overviewH)
+                             + static_cast<int>(gapBetweenOverviewAndList)
+                             + (tipsCount * tipRowHeight)
+                             + 16;
 
         auto parentBounds = parentContainer->getLocalBounds();
         // Convert screen target bounds into parent container's local coordinates
@@ -50,6 +79,8 @@ public:
 
         if (y + cardHeight > parentBounds.getBottom() - 12)
             y = localTargetRect.getY() - cardHeight - 6;
+        if (y < 12)
+            y = 12;
 
         setBounds(x, y, cardWidth, cardHeight);
         closeButton.setBounds(cardWidth - 28, 8, 20, 20);
@@ -94,28 +125,35 @@ public:
         contentArea.removeFromTop(6.0f);
 
         // 5. Overview Paragraph
-        g.setColour(CamelPhatLookAndFeel::textPrimary);
-        g.setFont(juce::FontOptions(12.5f, juce::Font::plain));
-        auto overviewArea = contentArea.removeFromTop(44.0f);
-        g.drawFittedText(currentTopic.overview, overviewArea.toNearestInt(), juce::Justification::topLeft, 3);
+        auto overviewLayout = createOverviewLayout(currentTopic.overview, contentArea.getWidth());
+        const float overviewHeight = std::ceil(overviewLayout.getHeight());
+        auto overviewArea = contentArea.removeFromTop(overviewHeight);
+        overviewLayout.draw(g, overviewArea);
 
-        contentArea.removeFromTop(8.0f);
+        // Constant, uniform distance between description and divider/list
+        constexpr float gapBetweenOverviewAndList = 10.0f;
+        contentArea.removeFromTop(gapBetweenOverviewAndList);
+
         g.setColour(CamelPhatLookAndFeel::cardBorder);
         g.drawHorizontalLine(static_cast<int>(contentArea.getY()), bounds.getX() + 10.0f, bounds.getRight() - 10.0f);
         contentArea.removeFromTop(8.0f);
 
         // 6. Parameter Tips
         g.setFont(juce::FontOptions(11.5f, juce::Font::plain));
+        constexpr float bulletSize = 4.5f;
         for (const auto& tip : currentTopic.parameterTips)
         {
             auto tipArea = contentArea.removeFromTop(24.0f);
-            // Bullet icon
+            const float bulletX = tipArea.getX() + 2.0f;
+            const float bulletY = tipArea.getY() + (tipArea.getHeight() - bulletSize) * 0.5f;
+
+            // Bullet icon aligned to exact vertical center of text row
             g.setColour(CamelPhatLookAndFeel::neonAmber);
-            g.fillEllipse(tipArea.getX(), tipArea.getY() + 5.0f, 5.0f, 5.0f);
+            g.fillEllipse(bulletX, bulletY, bulletSize, bulletSize);
 
             // Tip text
             g.setColour(CamelPhatLookAndFeel::textSecondary);
-            g.drawText(tip, tipArea.withTrimmedLeft(12.0f).toNearestInt(), juce::Justification::centredLeft, true);
+            g.drawText(tip, tipArea.withTrimmedLeft(14.0f).toNearestInt(), juce::Justification::centredLeft, true);
         }
     }
 

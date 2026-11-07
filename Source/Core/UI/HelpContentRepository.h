@@ -101,12 +101,16 @@ private:
 
         topics["compressor"] = {
             "Compressor (Optical Style Dynamics)",
-            "Smooth RMS-based compressor with soft-knee optical release ballistics and automatic makeup gain.",
-            "Stage 6: Dynamics & Glue",
+            "Studio-grade optical feed-forward compressor with dual-stage release ballistics, dynamic auto-makeup gain, and Anti-Derivative Anti-Aliasing (ADAA) saturation.",
+            "Stage 6: Dynamics & Parallel Compression",
             {
-                "Amount: Compression intensity adjusting threshold and ratio simultaneously.",
-                "Release: Optical recovery time (50 ms to 2000 ms).",
-                "Phat: Engages program-dependent dynamic punch saturation."
+                "Thresh: Sets the compression threshold (-48 dB to 0 dB).",
+                "Ratio: Sets compression slope (1.5:1 gentle leveling to 20:1 brickwall limiting).",
+                "Attack: Sets onset reaction time (0.1 ms fast clamping to 50 ms transient punch).",
+                "Release: Dual-stage optical decay timing with fast initial recovery (~50 ms) and program-dependent tail (10 ms to 1500 ms).",
+                "Mix: Dry/wet parallel compression blend (0% dry to 100% wet).",
+                "Phat: Engages -0.1 dBFS ceiling soft-clipping with zero-latency 1st-order ADAA anti-aliasing.",
+                "GR Meter: Wide horizontal gain-reduction display with analog ballistics, calibrated dB ticks, and floating peak-hold."
             }
         };
 

@@ -417,7 +417,79 @@ static void testCompressorGainReductionTelemetry()
     comp.process(ctx);
     assert(std::abs(comp.getGainReduction()) < 0.001f && "Bypassed compressor must report 0 dB GR");
 
-    std::cout << "  -> PASS: Compressor gain reduction telemetry reports negative dB under compression and resets to 0 dB when bypassed.\n" << std::endl;
+    // Dual-stage optical decay verification
+    comp.reset();
+    comp.setParameters(0.8f, 200.0f, false, false);
+    for (int ch = 0; ch < 2; ++ch)
+        for (int i = 0; i < 512; ++i)
+            buffer.setSample(ch, i, 0.95f);
+    comp.process(ctx);
+    const float heavyGr = comp.getGainReduction();
+    assert(heavyGr < -5.0f && "Heavy compression expected");
+
+    // Now feed silence and observe fast initial release (~50 ms = ~4-5 blocks at 512 samples/44.1 kHz)
+    for (int ch = 0; ch < 2; ++ch)
+        for (int i = 0; i < 512; ++i)
+            buffer.setSample(ch, i, 0.0f);
+
+    // Process ~50 ms of silence (4 blocks of 512 samples = ~46 ms)
+    for (int b = 0; b < 4; ++b)
+        comp.process(ctx);
+    const float midGr = comp.getGainReduction();
+    // Mid GR should have recovered substantially (closer to 0 than initial heavy GR)
+    assert(midGr > heavyGr && midGr < 0.0f && "Dual-stage release must show fast initial recovery");
+
+    // Process additional 500 ms (44 blocks)
+    for (int b = 0; b < 44; ++b)
+        comp.process(ctx);
+    const float finalGr = comp.getGainReduction();
+    assert(finalGr > midGr && "Optical tail must continue smooth decay toward 0 dB");
+
+    // Independent Threshold and Ratio verification (with amount = 0.0)
+    comp.reset();
+    comp.setParameters(0.0f, 100.0f, false, false, -24.0f, 6.0f, 2.0f, 1.0f);
+    for (int ch = 0; ch < 2; ++ch)
+        for (int i = 0; i < 512; ++i)
+            buffer.setSample(ch, i, 0.95f);
+    comp.process(ctx);
+    const float studioGr = comp.getGainReduction();
+    assert(studioGr < -2.0f && "Independent threshold and ratio must compress when amount = 0.0");
+
+    // Parallel Mix verification (mix = 0.0 -> 100% dry)
+    comp.reset();
+    comp.setParameters(0.0f, 100.0f, false, false, -24.0f, 6.0f, 2.0f, 0.0f);
+    for (int ch = 0; ch < 2; ++ch)
+        for (int i = 0; i < 512; ++i)
+            buffer.setSample(ch, i, 0.95f);
+    comp.process(ctx);
+    for (int ch = 0; ch < 2; ++ch)
+        for (int i = 0; i < 512; ++i)
+            assert(std::abs(buffer.getSample(ch, i) - 0.95f) < 1.0e-4f && "Mix = 0.0 must pass 100% dry uncompressed audio");
+
+    // Phat Mode 1st-order ADAA saturation ceiling and telemetry verification
+    comp.reset();
+    comp.setParameters(0.8f, 100.0f, true, false); // phat = true
+    for (int ch = 0; ch < 2; ++ch)
+        for (int i = 0; i < 512; ++i)
+            buffer.setSample(ch, i, 2.0f); // Over-driven input
+    comp.process(ctx);
+    assert(comp.isSaturating() && "Saturation telemetry must report true under overdriven Phat clipping");
+
+    constexpr float ceilingLinear = 0.988553f; // -0.1 dBFS
+    for (int ch = 0; ch < 2; ++ch)
+    {
+        for (int i = 0; i < 512; ++i)
+        {
+            const float sample = buffer.getSample(ch, i);
+            juce::ignoreUnused(sample);
+            assert(!std::isnan(sample) && !std::isinf(sample) && "ADAA output must be finite");
+            assert(std::abs(sample) <= ceilingLinear + 1.0e-3f && "ADAA ceiling must clamp to -0.1 dBFS");
+        }
+    }
+
+    juce::ignoreUnused(activeGr, heavyGr, midGr, finalGr, studioGr, ceilingLinear);
+
+    std::cout << "  -> PASS: Compressor gain reduction telemetry reports negative dB under compression, exhibits dual-stage optical release, supports studio controls, parallel mix, and enforces ADAA -0.1 dBFS ceiling in Phat mode.\n" << std::endl;
 }
 
 static void testEditorLayoutAndNonOverlap()
