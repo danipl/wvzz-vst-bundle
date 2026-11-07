@@ -43,7 +43,11 @@ public:
     }
 
     void setParameters(float amountNorm, float releaseMs, bool phatModeEnabled, bool bypass = false,
-                       float threshDb = -18.0f, float ratioVal = 4.0f, float attackMsVal = 5.0f, float mixVal = 1.0f) noexcept;
+                       float threshDb = -18.0f, float ratioVal = 4.0f, float attackMsVal = 5.0f, float mixVal = 1.0f,
+                       int mode = 0, float kneeDb = 0.0f) noexcept;
+
+    void setUseSidechainDetector(bool enable) noexcept { useSidechainDetector = enable; }
+    [[nodiscard]] bool isUsingSidechainDetector() const noexcept { return useSidechainDetector; }
 
 private:
     static inline float adaaAntiderivative(float x) noexcept
@@ -81,6 +85,8 @@ private:
     std::atomic<float>* ratioParam   { nullptr };
     std::atomic<float>* attackParam  { nullptr };
     std::atomic<float>* mixParam     { nullptr };
+    std::atomic<float>* modeParam    { nullptr };
+    std::atomic<float>* kneeParam    { nullptr };
 
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> amountSmoothed;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> releaseSmoothed;
@@ -88,11 +94,18 @@ private:
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> ratioSmoothed;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> attackSmoothed;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> mixSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> kneeSmoothed;
 
     float fastEnvelopeDb { 0.0f };
     float slowEnvelopeDb { 0.0f };
+    float vcaEnvelopeDb  { 0.0f };
+    float fetEnvelopeDb  { 0.0f };
     float prevInNormL    { 0.0f };
     float prevInNormR    { 0.0f };
+    bool useSidechainDetector { false };
+    int modeFallback { 0 };
+    bool phatFallback { false };
+    bool bypassFallback { false };
     std::atomic<float> gainReductionDb { 0.0f };
     std::atomic<float> saturationActivity { 0.0f };
 };

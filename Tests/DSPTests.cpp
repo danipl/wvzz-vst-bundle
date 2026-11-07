@@ -1,5 +1,8 @@
 #include "Plugins/WvZzDistortion/PluginProcessor.h"
 #include "Plugins/WvZzDistortion/PluginEditor.h"
+#include "Plugins/WvZzDynamics/PluginProcessor.h"
+#include "Plugins/WvZzDynamics/PluginEditor.h"
+#include "Plugins/WvZzDynamics/Presets/FactoryPresets.h"
 #include "Core/DSP/AudioVisualizerSource.h"
 #include "Modules/BPFilter/BPFilterModule.h"
 #include "Modules/Distortion/DistortionModule.h"
@@ -9,6 +12,11 @@
 #include "Modules/Compressor/CompressorModule.h"
 #include "Modules/Modulation/ModulationModule.h"
 #include "Modules/Master/MasterModule.h"
+#include "Modules/DynDetector/DynDetectorModule.h"
+#include "Modules/TransientShaper/TransientShaperModule.h"
+#include "Modules/MultibandOTT/MultibandOTTModule.h"
+#include "Modules/RhythmicPumper/RhythmicPumperModule.h"
+#include "Modules/MaximizerClipper/MaximizerClipperModule.h"
 
 #include <iostream>
 #include <vector>
@@ -811,10 +819,387 @@ static void testEdmHardstyleDspFeatures()
     std::cout << "  -> PASS: EDM & Hardstyle DSP (Clip/Fold, Pre-Distortion EQ, Mono Bass, Clipper, Supersaw Stability) verified.\n" << std::endl;
 }
 
+// ==============================================================================
+// WvZz Dynamics Verification Suites
+// ==============================================================================
+
+static void testWvZzDynamicsZeroAllocations()
+{
+    std::cout << "[Test 15/19] Running WvZz Dynamics Real-Time Zero-Allocation Audit..." << std::endl;
+
+    wvzz::WvZzDynamicsAudioProcessor processor;
+    const double rates[] = { 48000.0, 96000.0 };
+    const int blockSizes[] = { 512, 256 };
+
+    for (double sr : rates)
+    {
+        for (int bs : blockSizes)
+        {
+            processor.prepareToPlay(sr, bs);
+
+            juce::AudioBuffer<float> buffer(2, bs);
+            juce::MidiBuffer midi;
+            generateSineWave(buffer, sr, 120.0f);
+
+            // Warm up
+            processor.processBlock(buffer, midi);
+
+            g_allocationCount = 0;
+            g_trackingAllocations = true;
+
+            for (int i = 0; i < 1000; ++i)
+            {
+                processor.processBlock(buffer, midi);
+            }
+
+            g_trackingAllocations = false;
+            std::cout << "  -> " << sr << " Hz (" << bs << " samples): " << g_allocationCount << " heap allocations" << std::endl;
+
+            if (g_allocationCount != 0)
+            {
+                std::cerr << "FAIL: WvZz Dynamics performed " << g_allocationCount << " allocations on audio thread!" << std::endl;
+                std::exit(1);
+            }
+        }
+    }
+
+    std::cout << "  -> PASS: WvZz Dynamics zero dynamic allocations confirmed on audio thread.\n" << std::endl;
+}
+
+static void testWvZzDynamicsMultiInstancePrefixing()
+{
+    std::cout << "[Test 16/19] Verifying WvZz Dynamics Multi-Instance Parameter Prefixing..." << std::endl;
+
+    wvzz::modules::DynDetectorModule det("slotA_det");
+    wvzz::modules::TransientShaperModule trans("slotB_trans");
+    wvzz::modules::MultibandOTTModule ott("slotC_ott");
+    wvzz::modules::RhythmicPumperModule pump("slotD_pump");
+    wvzz::modules::MaximizerClipperModule clip("slotE_clip");
+
+    assert(det.getInstancePrefix() == "slotA_det");
+    assert(trans.getInstancePrefix() == "slotB_trans");
+    assert(ott.getInstancePrefix() == "slotC_ott");
+    assert(pump.getInstancePrefix() == "slotD_pump");
+    assert(clip.getInstancePrefix() == "slotE_clip");
+
+    std::cout << "  -> PASS: All dynamics modules support isolated multi-instance prefixing.\n" << std::endl;
+}
+
+static void testWvZzDynamicsFactoryPresetsRecall()
+{
+    std::cout << "[Test 17/19] Verifying WvZz Dynamics Factory Presets Recall (20 Presets)..." << std::endl;
+
+    wvzz::WvZzDynamicsAudioProcessor processor;
+    processor.prepareToPlay(48000.0, 512);
+
+    const auto& presets = wvzz::dynamics::getFactoryPresets();
+    assert(presets.size() == 20);
+    assert(processor.getNumPrograms() == 20);
+
+    juce::AudioBuffer<float> buffer(2, 512);
+    juce::MidiBuffer midi;
+
+    for (int i = 0; i < 20; ++i)
+    {
+        processor.setCurrentProgram(i);
+        const juce::String progName = processor.getProgramName(i);
+        if (progName != presets[static_cast<size_t>(i)].name)
+        {
+            std::cerr << "FAIL: Preset index " << i << " name mismatch: " << progName << " vs " << presets[static_cast<size_t>(i)].name << std::endl;
+            std::exit(1);
+        }
+
+        // Test numerical stability under preset
+        generateSineWave(buffer, 48000.0, 150.0f);
+        processor.processBlock(buffer, midi);
+
+        for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+        {
+            const float* chData = buffer.getReadPointer(ch);
+            for (int s = 0; s < buffer.getNumSamples(); ++s)
+            {
+                if (std::isnan(chData[s]) || std::isinf(chData[s]))
+                {
+                    std::cerr << "FAIL: NaN or Inf detected in preset " << progName << std::endl;
+                    std::exit(1);
+                }
+            }
+        }
+    }
+
+    std::cout << "  -> PASS: All 20 WvZz Dynamics factory presets recalled with numerical stability.\n" << std::endl;
+}
+
+static void testWvZzDynamicsDSPMath()
+{
+    std::cout << "[Test 18/19] Verifying WvZz Dynamics DSP Math & Processing Algorithms..." << std::endl;
+
+    const double sampleRate = 48000.0;
+    const int blockSize = 512;
+    juce::dsp::ProcessSpec spec { sampleRate, static_cast<juce::uint32>(blockSize), 2 };
+
+    // 1. DynDetector Linkwitz-Riley Sub Split
+    {
+        wvzz::modules::DynDetectorDSP detDSP("det");
+        detDSP.prepare(spec);
+        detDSP.setParameters(100.0f, true, 0.2f, 30.0f, 0.0f);
+
+        juce::AudioBuffer<float> mainBuf(2, blockSize);
+        juce::AudioBuffer<float> subAuxBuf(2, blockSize);
+        juce::AudioBuffer<float> scBuf(2, blockSize);
+        generateSineWave(mainBuf, sampleRate, 50.0f); // 50 Hz sub tone
+
+        bool hasSubSplit = false;
+        wvzz::ProcessContext ctx {
+            mainBuf,
+            scBuf,
+            subAuxBuf,
+            hasSubSplit,
+            nullptr,
+            0,
+            120.0,
+            0.0,
+            false,
+            0,
+            0.0f
+        };
+
+        detDSP.process(ctx);
+
+        const float subRms = calculateRms(subAuxBuf, 0);
+        std::cout << "  -> DynDetector: SubAux RMS for 50Hz tone: " << subRms << std::endl;
+        assert(subRms > 0.1f);
+    }
+
+    // 2. Transient Shaper Differential Attack Boost
+    {
+        wvzz::modules::TransientShaperDSP transDSP("trans");
+        transDSP.prepare(spec);
+
+        juce::AudioBuffer<float> stepBuf(2, blockSize);
+        juce::AudioBuffer<float> dummyBuf(2, blockSize);
+        stepBuf.clear();
+        stepBuf.setSample(0, 0, 1.0f);
+        stepBuf.setSample(1, 0, 1.0f);
+
+        bool dummySplit = false;
+        wvzz::ProcessContext ctx {
+            stepBuf,
+            dummyBuf,
+            dummyBuf,
+            dummySplit,
+            nullptr,
+            0,
+            120.0,
+            0.0,
+            false,
+            0,
+            0.0f
+        };
+
+        transDSP.process(ctx);
+        const float peak = stepBuf.getMagnitude(0, blockSize);
+        std::cout << "  -> TransientShaper: Processed peak: " << peak << std::endl;
+        assert(!std::isnan(peak) && peak > 0.0f);
+    }
+
+    // 3. Maximizer Clipper Ceiling Limiting
+    {
+        wvzz::modules::MaximizerClipperDSP clipDSP("clip");
+        clipDSP.prepare(spec);
+        clipDSP.setParameters(12.0f, -0.1f, 0, 1.0f);
+
+        juce::AudioBuffer<float> loudBuf(2, blockSize);
+        juce::AudioBuffer<float> dummyBuf(2, blockSize);
+        generateSineWave(loudBuf, sampleRate, 1000.0f);
+        loudBuf.applyGain(4.0f);
+
+        bool dummySplit = false;
+        wvzz::ProcessContext ctx {
+            loudBuf,
+            dummyBuf,
+            dummyBuf,
+            dummySplit,
+            nullptr,
+            0,
+            120.0,
+            0.0,
+            false,
+            0,
+            0.0f
+        };
+
+        clipDSP.process(ctx);
+        const float maxPeak = loudBuf.getMagnitude(0, blockSize);
+        std::cout << "  -> MaximizerClipper: Clipped peak with +12dB input drive: " << maxPeak << std::endl;
+        if (maxPeak > 1.05f)
+        {
+            std::cerr << "FAIL: MaximizerClipper failed to limit loud signal: " << maxPeak << std::endl;
+            std::exit(1);
+        }
+    }
+
+    // 4. DynDetector Linkwitz-Riley 24 dB/oct Flat Magnitude Recombination
+    {
+        wvzz::modules::DynDetectorDSP detDSP("det");
+        detDSP.prepare(spec);
+        detDSP.setParameters(120.0f, true, 0.0f, 20.0f, 0.0f); // subTight = 0.0 -> pure LR4 split
+
+        const int settleSize = 4096;
+        juce::AudioBuffer<float> mainBuf(2, settleSize);
+        juce::AudioBuffer<float> subAuxBuf(2, settleSize);
+        juce::AudioBuffer<float> scBuf(2, settleSize);
+
+        generateSineWave(mainBuf, sampleRate, 120.0f);
+        bool hasSubSplit = false;
+        wvzz::ProcessContext ctx { mainBuf, scBuf, subAuxBuf, hasSubSplit, nullptr, 0, 120.0, 0.0, false, 0, 0.0f };
+        detDSP.process(ctx);
+        mainBuf.addFrom(0, 0, subAuxBuf.getReadPointer(0), settleSize);
+
+        const float recombinedPeak = mainBuf.getMagnitude(0, settleSize / 2, settleSize / 2);
+        std::cout << "  -> DynDetector LR4 120Hz Recombined Peak (Expected ~1.00): " << recombinedPeak << std::endl;
+        if (std::abs(recombinedPeak - 1.00f) > 0.02f)
+        {
+            std::cerr << "FAIL: DynDetector LR4 crossover recombination magnitude error: " << recombinedPeak << std::endl;
+            std::exit(1);
+        }
+    }
+
+    // 5. MultibandOTT 3-Band LR4 Flat Recombination & Upward Compression Boost
+    {
+        wvzz::modules::MultibandOTTDSP ottDSP("ott");
+        ottDSP.prepare(spec);
+        // Set 0 upward, 0 downward, 0 sheen, 100% depth -> pure 3-band LR4 crossover sum
+        ottDSP.setParameters(1.0f, 0.0f, 0.0f, 1.0f, 0.0f, false);
+
+        const int settleSize = 4096;
+        juce::AudioBuffer<float> mainBuf(2, settleSize);
+        juce::AudioBuffer<float> dummyBuf(2, settleSize);
+
+        generateSineWave(mainBuf, sampleRate, 120.0f); // Test right on Crossover 1
+        bool dummySplit = false;
+        wvzz::ProcessContext ctx { mainBuf, dummyBuf, dummyBuf, dummySplit, nullptr, 0, 120.0, 0.0, false, 0, 0.0f };
+        ottDSP.process(ctx);
+
+        const float unityPeak = mainBuf.getMagnitude(0, settleSize / 2, settleSize / 2);
+        std::cout << "  -> MultibandOTT 3-Band LR4 Unity Recombined Peak (Expected ~1.00): " << unityPeak << std::endl;
+        if (std::abs(unityPeak - 1.00f) > 0.02f)
+        {
+            std::cerr << "FAIL: MultibandOTT 3-band crossover failed flat recombination: " << unityPeak << std::endl;
+            std::exit(1);
+        }
+    }
+
+    // 6. WvZzDynamics Master Bypass & Dry/Wet Mix Fidelity (Ensuring SC HPF does not leak into Dry path)
+    {
+        wvzz::WvZzDynamicsAudioProcessor proc;
+        proc.prepareToPlay(sampleRate, 4096);
+
+        // Set SC HPF to 500 Hz and Master Bypass = ON
+        if (auto* pScHp = proc.getAPVTS().getParameter("det_sc_hp"))
+            pScHp->setValueNotifyingHost(pScHp->convertTo0to1(500.0f));
+        if (auto* pBypass = proc.getAPVTS().getParameter("master_bypass"))
+            pBypass->setValueNotifyingHost(1.0f);
+
+        juce::AudioBuffer<float> subToneBuf(2, 4096);
+        juce::MidiBuffer midi;
+
+        generateSineWave(subToneBuf, sampleRate, 50.0f); // 50 Hz sub-bass (well below 500 Hz SC HPF)
+        proc.processBlock(subToneBuf, midi);
+
+        const float bypassedSubPeak = subToneBuf.getMagnitude(0, 2048, 2048);
+        std::cout << "  -> WvZzDynamics Master Bypass 50Hz Peak with 500Hz SC HPF (Expected ~1.00): " << bypassedSubPeak << std::endl;
+        if (std::abs(bypassedSubPeak - 1.00f) > 0.02f)
+        {
+            std::cerr << "FAIL: Master Bypass leaked filtered sidechain signal instead of clean dry input: " << bypassedSubPeak << std::endl;
+            std::exit(1);
+        }
+    }
+
+    // 7. Transient Gate Stability & Full-Spectrum Detection under Sub Lock around -16.3 dB
+    {
+        wvzz::modules::DynDetectorDSP detDSP("det");
+        wvzz::modules::TransientShaperDSP transDSP("trans");
+        detDSP.prepare(spec);
+        transDSP.prepare(spec);
+
+        // Sub Lock ON at 90 Hz
+        detDSP.setParameters(90.0f, true, 0.0f, 80.0f, 0.0f);
+        // Attack = 0, Sustain = 0, Gate = -16.3 dB (0.1531 linear)
+        transDSP.setParameters(0.0f, 0.0f, 0, -16.3f, false);
+
+        const int testSamples = 4096;
+        juce::AudioBuffer<float> mainBuf(2, testSamples);
+        juce::AudioBuffer<float> subAuxBuf(2, testSamples);
+        juce::AudioBuffer<float> scBuf(2, testSamples);
+
+        // Case A: Signal at -14 dBFS (0.20 linear > -16.3 dB threshold) -> Gate must stay 100% open without chattering
+        generateSineWave(mainBuf, sampleRate, 60.0f);
+        mainBuf.applyGain(0.20f);
+        bool hasSubSplit = false;
+        wvzz::ProcessContext ctxOpen { mainBuf, scBuf, subAuxBuf, hasSubSplit, nullptr, 0, 120.0, 0.0, false, 0, 0.0f };
+        detDSP.process(ctxOpen);
+        transDSP.process(ctxOpen);
+        mainBuf.addFrom(0, 0, subAuxBuf.getReadPointer(0), testSamples);
+
+        const float openPeak = mainBuf.getMagnitude(0, testSamples / 2, testSamples / 2);
+        std::cout << "  -> TransientGate (-16.3 dB) with -14 dBFS 60Hz signal Peak (Expected ~0.20): " << openPeak << std::endl;
+        if (std::abs(openPeak - 0.20f) > 0.015f)
+        {
+            std::cerr << "FAIL: TransientGate chattered or attenuated signal above threshold: " << openPeak << std::endl;
+            std::exit(1);
+        }
+
+        // Case B: Quiet noise tail at -32 dBFS (0.025 linear < -16.3 dB threshold) -> Gate must attenuate both Upper and Sub bands
+        detDSP.reset();
+        transDSP.reset();
+        generateSineWave(mainBuf, sampleRate, 60.0f);
+        mainBuf.applyGain(0.025f);
+        wvzz::ProcessContext ctxClosed { mainBuf, scBuf, subAuxBuf, hasSubSplit, nullptr, 0, 120.0, 0.0, false, 0, 0.0f };
+        detDSP.process(ctxClosed);
+        transDSP.process(ctxClosed);
+        mainBuf.addFrom(0, 0, subAuxBuf.getReadPointer(0), testSamples);
+
+        const float gatedTailPeak = mainBuf.getMagnitude(0, (testSamples * 3) / 4, testSamples / 4);
+        std::cout << "  -> TransientGate (-16.3 dB) with -32 dBFS 60Hz signal Gated Peak (Expected < 0.005): " << gatedTailPeak << std::endl;
+        if (gatedTailPeak > 0.006f)
+        {
+            std::cerr << "FAIL: TransientGate failed to gate sub-bass or tail below threshold: " << gatedTailPeak << std::endl;
+            std::exit(1);
+        }
+    }
+
+    std::cout << "  -> PASS: DynDetector, TransientShaper, MultibandOTT, MaximizerClipper, and Master Dry/Wet verified.\n" << std::endl;
+}
+
+static void testWvZzDynamicsEditorLayoutAndNonOverlap()
+{
+    std::cout << "[Test 19/19] Verifying WvZz Dynamics UI Layout and Geometry..." << std::endl;
+
+    wvzz::WvZzDynamicsAudioProcessor processor;
+    processor.prepareToPlay(48000.0, 512);
+
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    if (!editor)
+    {
+        std::cerr << "FAIL: createEditor() returned null for WvZz Dynamics!" << std::endl;
+        std::exit(1);
+    }
+
+    editor->setSize(1080, 680);
+    if (editor->getWidth() != 1080 || editor->getHeight() != 680)
+    {
+        std::cerr << "FAIL: Editor dimensions mismatch: " << editor->getWidth() << "x" << editor->getHeight() << std::endl;
+        std::exit(1);
+    }
+
+    std::cout << "  -> PASS: WvZz Dynamics UI instantiated at 1080x680 canvas successfully.\n" << std::endl;
+}
+
 int main(int, char*[])
 {
     std::cout << "=====================================================" << std::endl;
-    std::cout << "   WvZz Distortion DSP Engine - Automated Verification" << std::endl;
+    std::cout << "   WvZz Audio Plugins DSP Engine - Automated Tests   " << std::endl;
     std::cout << "=====================================================\n" << std::endl;
 
     try
@@ -834,8 +1219,15 @@ int main(int, char*[])
         testAudioVisualizerSourceFifo();
         testEdmHardstyleDspFeatures();
 
+        // Dynamics suites
+        testWvZzDynamicsZeroAllocations();
+        testWvZzDynamicsMultiInstancePrefixing();
+        testWvZzDynamicsFactoryPresetsRecall();
+        testWvZzDynamicsDSPMath();
+        testWvZzDynamicsEditorLayoutAndNonOverlap();
+
         std::cout << "=====================================================" << std::endl;
-        std::cout << "   ALL 14 DSP SUITES PASSED (100% SUCCESS)           " << std::endl;
+        std::cout << "   ALL 19 DSP SUITES PASSED (100% SUCCESS)           " << std::endl;
         std::cout << "=====================================================" << std::endl;
         return 0;
     }

@@ -7,9 +7,19 @@ namespace wvzz {
 /**
  * @brief 22-item Modulatable Targets Enum.
  */
+enum class ModProfile : int
+{
+    Distortion = 0,
+    Dynamics
+};
+
+/**
+ * @brief Modulatable Targets Enum across WvZz Distortion (0..21) and WvZz Dynamics (22..33).
+ */
 enum class ModTarget : int
 {
     None = 0,
+    // --- Distortion Profile Targets ---
     BPLowCut,
     BPHighCut,
     BPBothCuts,
@@ -30,7 +40,21 @@ enum class ModTarget : int
     CompAmount,
     MasterMix,
     LFO2Rate,
-    MasterVol
+    MasterVol,
+
+    // --- Dynamics Profile Targets ---
+    DynSubXover,
+    DynScHp,
+    DynTransAttack,
+    DynTransSustain,
+    DynOttDepth,
+    DynOttUpDrive,
+    DynOttSheen,
+    DynCompThresh,
+    DynCompMix,
+    DynPumpAmount,
+    DynPumpCurve,
+    DynClipDrive
 };
 
 /**
@@ -51,6 +75,7 @@ struct ProcessContext
     double hostPpqPosition = 0.0;
     bool isHostPlaying = false;
     int distortionLatencySamples = 0;
+    float cumulativeGainReductionDb = 0.0f;
 
     /**
      * @brief O(1) lock-free modulation offset lookup by integer index.

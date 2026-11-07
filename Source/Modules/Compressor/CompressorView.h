@@ -73,8 +73,11 @@ private:
     RotaryControl ratioKnob;
     RotaryControl attackKnob;
     RotaryControl releaseKnob;
+    RotaryControl kneeKnob;
     RotaryControl mixKnob;
     ToggleControl phatToggle;
+    juce::ComboBox modeSelector;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment;
 
     std::unique_ptr<GRMeterComponent> grMeter;
 

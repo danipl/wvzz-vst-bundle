@@ -9,10 +9,10 @@ namespace wvzz::modules {
 class ModulationModule : public IPluginModule
 {
 public:
-    explicit ModulationModule(juce::String prefix = "mod", dsp::AudioVisualizerSource* visualizer = nullptr)
+    explicit ModulationModule(juce::String prefix = "mod", dsp::AudioVisualizerSource* visualizer = nullptr, ModProfile profile = ModProfile::Distortion)
         : instancePrefix(std::move(prefix)),
           visualizerSource(visualizer),
-          dsp(instancePrefix)
+          dsp(instancePrefix, profile)
     {
     }
 
@@ -34,7 +34,7 @@ public:
         juce::AudioProcessorValueTreeState& apvts,
         ui::IHelpOverlayHost* helpHost = nullptr) override
     {
-        return std::make_unique<ModulationView>(apvts, dsp, visualizerSource, helpHost);
+        return std::make_unique<ModulationView>(apvts, dsp, visualizerSource, helpHost, dsp.getModProfile());
     }
 
 private:
