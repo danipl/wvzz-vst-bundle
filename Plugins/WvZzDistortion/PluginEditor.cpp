@@ -9,14 +9,14 @@ void WvZzDistortionAudioProcessorEditor::ContentContainer::paint(juce::Graphics&
 
     // 2. Top Header Bar
     auto headerArea = juce::Rectangle<int>(0, 0, 1080, 48).toFloat();
-    juce::ColourGradient headerGrad(ui::WvZzLookAndFeel::cardBg.brighter(0.05f),
+    juce::ColourGradient headerGrad(ui::WvZzLookAndFeel::cardBg.brighter(0.04f),
                                     0, 0,
-                                    ui::WvZzLookAndFeel::cardBg.darker(0.1f),
+                                    ui::WvZzLookAndFeel::cardBg.darker(0.15f),
                                     0, 48, false);
     g.setGradientFill(headerGrad);
     g.fillRect(headerArea);
 
-    g.setColour(ui::WvZzLookAndFeel::cardBorder);
+    g.setColour(ui::WvZzLookAndFeel::cardBorder.withAlpha(0.45f));
     g.drawHorizontalLine(48, 0, 1080);
 }
 
@@ -40,7 +40,7 @@ WvZzDistortionAudioProcessorEditor::WvZzDistortionAudioProcessorEditor(WvZzDisto
 
     signalFlowLabel.setText("BP \u2192 DIST \u2192 MM+BR \u2192 FLG \u2192 EQ \u2192 COMP \u2192 MASTER", juce::dontSendNotification);
     signalFlowLabel.setFont(juce::FontOptions(9.5f, juce::Font::plain));
-    signalFlowLabel.setColour(juce::Label::textColourId, ui::WvZzLookAndFeel::neonCyan.withAlpha(0.75f));
+    signalFlowLabel.setColour(juce::Label::textColourId, ui::WvZzLookAndFeel::skyCyan.withAlpha(0.75f));
     signalFlowLabel.setJustificationType(juce::Justification::centred);
     contentContainer.addAndMakeVisible(signalFlowLabel);
 
@@ -74,7 +74,7 @@ WvZzDistortionAudioProcessorEditor::WvZzDistortionAudioProcessorEditor(WvZzDisto
     contentContainer.addAndMakeVisible(diceButton);
 
     initToggle(masterBypassToggle, "master_bypass", "BYPASS", false, true,
-               ui::WvZzLookAndFeel::neonAmber);
+               ui::WvZzLookAndFeel::warmAmber);
 
     // Create 8 polymorphic module views
     bpView = audioProcessor.getBPFilterModule().createView(audioProcessor.getAPVTS(), this);

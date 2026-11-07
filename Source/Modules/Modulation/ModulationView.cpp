@@ -56,7 +56,7 @@ ModulationView::ModulationView(juce::AudioProcessorValueTreeState& apvts,
                                ui::IHelpOverlayHost* helpHost)
     : apvtsState(apvts),
       modDSP(dsp),
-      card("MODULATION & X/Y", ui::WvZzLookAndFeel::neonGreen)
+      card("MODULATION & X/Y", ui::WvZzLookAndFeel::skyCyan)
 {
     addAndMakeVisible(card);
 
@@ -79,7 +79,7 @@ ModulationView::ModulationView(juce::AudioProcessorValueTreeState& apvts,
     monitorTabButton.onClick = [this] { setCenterTab(true); };
 
     // X/Y Pad & Visualizer
-    xyPad = std::make_unique<ui::XYPadComponent>(apvtsState, "xy_x", "xy_y", "X/Y PAD", "X Target", "Y Target", ui::WvZzLookAndFeel::neonGreen);
+    xyPad = std::make_unique<ui::XYPadComponent>(apvtsState, "xy_x", "xy_y", "X/Y PAD", "X Target", "Y Target", ui::WvZzLookAndFeel::skyCyan);
     addAndMakeVisible(*xyPad);
 
     if (visualizerSource != nullptr)
@@ -91,8 +91,8 @@ ModulationView::ModulationView(juce::AudioProcessorValueTreeState& apvts,
     const auto& modTargets = getModTargetNames();
     initCombo(xyXTargetBox, "xy_x_target", "X Target", modTargets);
     initCombo(xyYTargetBox, "xy_y_target", "Y Target", modTargets);
-    initRotary(xyXDepthKnob, "xy_x_depth", "X Depth", true, ui::WvZzLookAndFeel::neonGreen);
-    initRotary(xyYDepthKnob, "xy_y_depth", "Y Depth", true, ui::WvZzLookAndFeel::neonGreen);
+    initRotary(xyXDepthKnob, "xy_x_depth", "X Depth", true, ui::WvZzLookAndFeel::skyCyan);
+    initRotary(xyYDepthKnob, "xy_y_depth", "Y Depth", true, ui::WvZzLookAndFeel::skyCyan);
 
     xyXTargetBox.box.onChange = [this, &modTargets] {
         int idx = xyXTargetBox.box.getSelectedItemIndex();
@@ -111,7 +111,7 @@ ModulationView::ModulationView(juce::AudioProcessorValueTreeState& apvts,
         }
     };
 
-    // LFO 1 Panel
+    // LFO 1 Panel (Sky Cyan)
     const auto& lfoWaves = getLFOWaveformNames();
     const auto& lfoSyncDivs = getLFOSyncDivNames();
 
@@ -119,30 +119,30 @@ ModulationView::ModulationView(juce::AudioProcessorValueTreeState& apvts,
         [this] { return lfo1WaveBox.box.getSelectedItemIndex(); },
         [this] { return modDSP.getLfo1Phase(); },
         [this] { return modDSP.getLfo1Snapshot(); },
-        ui::WvZzLookAndFeel::neonGreen);
+        ui::WvZzLookAndFeel::skyCyan);
     addAndMakeVisible(*lfo1Scope);
 
     initCombo(lfo1WaveBox, "lfo1_wave", "Wave", lfoWaves);
-    initToggle(lfo1SyncToggle, "lfo1_sync", "SYNC", true, ui::WvZzLookAndFeel::neonGreen);
+    initToggle(lfo1SyncToggle, "lfo1_sync", "SYNC", true, ui::WvZzLookAndFeel::skyCyan);
     initCombo(lfo1SyncDivBox, "lfo1_sync_div", "Sync Div", lfoSyncDivs);
     initCombo(lfo1TargetBox, "lfo1_target", "Target", modTargets);
-    initRotary(lfo1RateKnob, "lfo1_rate", "Rate", false, ui::WvZzLookAndFeel::neonGreen);
-    initRotary(lfo1DepthKnob, "lfo1_depth", "Depth", true, ui::WvZzLookAndFeel::neonGreen);
+    initRotary(lfo1RateKnob, "lfo1_rate", "Rate", false, ui::WvZzLookAndFeel::skyCyan);
+    initRotary(lfo1DepthKnob, "lfo1_depth", "Depth", true, ui::WvZzLookAndFeel::skyCyan);
 
-    // LFO 2 Panel
+    // LFO 2 Panel (Warm Amber)
     lfo2Scope = std::make_unique<LFOScopeComponent>(
         [this] { return lfo2WaveBox.box.getSelectedItemIndex(); },
         [this] { return modDSP.getLfo2Phase(); },
         [this] { return modDSP.getLfo2Snapshot(); },
-        ui::WvZzLookAndFeel::neonGreen);
+        ui::WvZzLookAndFeel::warmAmber);
     addAndMakeVisible(*lfo2Scope);
 
     initCombo(lfo2WaveBox, "lfo2_wave", "Wave", lfoWaves);
-    initToggle(lfo2SyncToggle, "lfo2_sync", "SYNC", true, ui::WvZzLookAndFeel::neonGreen);
+    initToggle(lfo2SyncToggle, "lfo2_sync", "SYNC", true, ui::WvZzLookAndFeel::warmAmber);
     initCombo(lfo2SyncDivBox, "lfo2_sync_div", "Sync Div", lfoSyncDivs);
     initCombo(lfo2TargetBox, "lfo2_target", "Target", modTargets);
-    initRotary(lfo2RateKnob, "lfo2_rate", "Rate", false, ui::WvZzLookAndFeel::neonGreen);
-    initRotary(lfo2DepthKnob, "lfo2_depth", "Depth", true, ui::WvZzLookAndFeel::neonGreen);
+    initRotary(lfo2RateKnob, "lfo2_rate", "Rate", false, ui::WvZzLookAndFeel::warmAmber);
+    initRotary(lfo2DepthKnob, "lfo2_depth", "Depth", true, ui::WvZzLookAndFeel::warmAmber);
 
     setCenterTab(true);
 }
@@ -201,14 +201,14 @@ void ModulationView::setCenterTab(bool showMonitor)
     isMonitorActive = showMonitor;
 
     xyTabButton.setColour(juce::TextButton::buttonColourId,
-        !showMonitor ? ui::WvZzLookAndFeel::neonGreen.withAlpha(0.25f) : ui::WvZzLookAndFeel::cardBg.darker(0.2f));
+        !showMonitor ? ui::WvZzLookAndFeel::skyCyan.withAlpha(0.25f) : ui::WvZzLookAndFeel::cardBg.darker(0.2f));
     xyTabButton.setColour(juce::TextButton::textColourOffId,
-        !showMonitor ? ui::WvZzLookAndFeel::neonGreen : ui::WvZzLookAndFeel::textSecondary);
+        !showMonitor ? ui::WvZzLookAndFeel::skyCyan : ui::WvZzLookAndFeel::textSecondary);
 
     monitorTabButton.setColour(juce::TextButton::buttonColourId,
-        showMonitor ? ui::WvZzLookAndFeel::neonCyan.withAlpha(0.25f) : ui::WvZzLookAndFeel::cardBg.darker(0.2f));
+        showMonitor ? ui::WvZzLookAndFeel::skyCyan.withAlpha(0.25f) : ui::WvZzLookAndFeel::cardBg.darker(0.2f));
     monitorTabButton.setColour(juce::TextButton::textColourOffId,
-        showMonitor ? ui::WvZzLookAndFeel::neonCyan : ui::WvZzLookAndFeel::textSecondary);
+        showMonitor ? ui::WvZzLookAndFeel::skyCyan : ui::WvZzLookAndFeel::textSecondary);
 
     if (xyPad != nullptr) xyPad->setVisible(!showMonitor);
     if (signalVisualizer != nullptr) signalVisualizer->setVisible(showMonitor);
@@ -223,7 +223,7 @@ void ModulationView::setCenterTab(bool showMonitor)
     xyYDepthKnob.label.setVisible(!showMonitor);
 
     card.setTitle(showMonitor ? "ANALYSIS & MONITOR" : "MODULATION & X/Y");
-    card.setAccentColor(showMonitor ? ui::WvZzLookAndFeel::neonCyan : ui::WvZzLookAndFeel::neonGreen);
+    card.setAccentColor(ui::WvZzLookAndFeel::skyCyan);
 
     resized();
 }

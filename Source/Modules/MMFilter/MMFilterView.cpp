@@ -8,7 +8,7 @@ MMFilterView::MMFilterView(juce::AudioProcessorValueTreeState& apvts,
                            ui::IHelpOverlayHost* helpHost)
     : apvtsState(apvts),
       instancePrefix(prefix),
-      card("MM FILTER", ui::WvZzLookAndFeel::neonGreen)
+      card("MM FILTER", ui::WvZzLookAndFeel::emeraldGreen)
 {
     addAndMakeVisible(card);
 
@@ -49,12 +49,12 @@ MMFilterView::MMFilterView(juce::AudioProcessorValueTreeState& apvts,
         apvtsState, paramId("type"), typeBox.box);
 
     // Rotary Knobs
-    initRotary(cutoffKnob,   paramId("cutoff"),    "Cutoff",  false, ui::WvZzLookAndFeel::neonGreen);
-    initRotary(resKnob,      paramId("res"),       "Res",     false, ui::WvZzLookAndFeel::neonGreen);
-    initRotary(mixKnob,      paramId("mix"),       "Mix",     false, ui::WvZzLookAndFeel::neonGreen);
-    initRotary(envAttKnob,   paramId("env_att"),   "Attack",  false, ui::WvZzLookAndFeel::neonGreen);
-    initRotary(envRelKnob,   paramId("env_rel"),   "Release", false, ui::WvZzLookAndFeel::neonGreen);
-    initRotary(envDepthKnob, paramId("env_depth"), "Env Mod", true,  ui::WvZzLookAndFeel::neonGreen);
+    initRotary(cutoffKnob,   paramId("cutoff"),    "Cutoff",  false, ui::WvZzLookAndFeel::emeraldGreen);
+    initRotary(resKnob,      paramId("res"),       "Res",     false, ui::WvZzLookAndFeel::emeraldGreen);
+    initRotary(mixKnob,      paramId("mix"),       "Mix",     false, ui::WvZzLookAndFeel::emeraldGreen);
+    initRotary(envAttKnob,   paramId("env_att"),   "Attack",  false, ui::WvZzLookAndFeel::emeraldGreen);
+    initRotary(envRelKnob,   paramId("env_rel"),   "Release", false, ui::WvZzLookAndFeel::emeraldGreen);
+    initRotary(envDepthKnob, paramId("env_depth"), "Env Mod", true,  ui::WvZzLookAndFeel::emeraldGreen);
 }
 
 void MMFilterView::initRotary(RotaryControl& rc, const juce::String& paramId, const juce::String& labelText,

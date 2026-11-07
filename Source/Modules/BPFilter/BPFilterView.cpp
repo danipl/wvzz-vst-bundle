@@ -30,7 +30,7 @@ void BPFilterView::PassbandVisualizer::paint(juce::Graphics& g)
     {
         auto passRect = juce::Rectangle<float>(bgRect.getX() + 1.0f, passTop,
                                                bgRect.getWidth() - 2.0f, passBottom - passTop);
-        g.setColour(ui::WvZzLookAndFeel::neonCyan.withAlpha(0.28f));
+        g.setColour(ui::WvZzLookAndFeel::warmAmber.withAlpha(0.28f));
         g.fillRoundedRectangle(passRect, 2.0f);
     }
 }
@@ -40,7 +40,7 @@ BPFilterView::BPFilterView(juce::AudioProcessorValueTreeState& apvts,
                            ui::IHelpOverlayHost* helpHost)
     : apvtsState(apvts),
       instancePrefix(prefix),
-      card("BP FILTER & SPLIT", ui::WvZzLookAndFeel::neonCyan)
+      card("BP FILTER & SPLIT", ui::WvZzLookAndFeel::warmAmber)
 {
     addAndMakeVisible(card);
 
@@ -69,6 +69,7 @@ BPFilterView::BPFilterView(juce::AudioProcessorValueTreeState& apvts,
     auto setupSlider = [this](juce::Slider& s) {
         s.setSliderStyle(juce::Slider::LinearVertical);
         s.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+        s.getProperties().set("accentColor", static_cast<int>(ui::WvZzLookAndFeel::warmAmber.getARGB()));
         addAndMakeVisible(s);
     };
 
@@ -86,7 +87,7 @@ BPFilterView::BPFilterView(juce::AudioProcessorValueTreeState& apvts,
     // Link Toggle
     linkToggle.button.setButtonText("LINK");
     linkToggle.button.getProperties().set("isPill", true);
-    linkToggle.button.getProperties().set("accentColor", static_cast<int>(ui::WvZzLookAndFeel::neonCyan.getARGB()));
+    linkToggle.button.getProperties().set("accentColor", static_cast<int>(ui::WvZzLookAndFeel::warmAmber.getARGB()));
     linkToggle.attachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
         apvtsState, paramId("link"), linkToggle.button);
     addAndMakeVisible(linkToggle.button);
@@ -160,9 +161,9 @@ BPFilterView::BPFilterView(juce::AudioProcessorValueTreeState& apvts,
     addAndMakeVisible(highCutLabel);
 
     // Rotary Knobs
-    initRotary(lowResKnob, paramId("low_res"), "Low Res", ui::WvZzLookAndFeel::neonCyan);
-    initRotary(highResKnob, paramId("high_res"), "High Res", ui::WvZzLookAndFeel::neonCyan);
-    initRotary(brMixKnob, paramId("br_mix"), "BR Mix", ui::WvZzLookAndFeel::neonCyan);
+    initRotary(lowResKnob, paramId("low_res"), "Low Res", ui::WvZzLookAndFeel::warmAmber);
+    initRotary(highResKnob, paramId("high_res"), "High Res", ui::WvZzLookAndFeel::warmAmber);
+    initRotary(brMixKnob, paramId("br_mix"), "BR Mix", ui::WvZzLookAndFeel::warmAmber);
 }
 
 void BPFilterView::initRotary(RotaryControl& rc, const juce::String& paramId, const juce::String& labelText, juce::Colour accent)

@@ -7,7 +7,7 @@ DistortionView::DistortionView(juce::AudioProcessorValueTreeState& apvts,
                                ui::IHelpOverlayHost* helpHost)
     : apvtsState(apvts),
       instancePrefix(prefix),
-      card("DISTORTION", ui::WvZzLookAndFeel::neonAmber)
+      card("DISTORTION", ui::WvZzLookAndFeel::coralRed)
 {
     addAndMakeVisible(card);
 
@@ -42,10 +42,10 @@ DistortionView::DistortionView(juce::AudioProcessorValueTreeState& apvts,
         apvtsState, paramId("mode"), modeSelector.box);
 
     // Rotary Knobs: Mech, Tube, Bitcrush, Xcita
-    initRotary(mechKnob, paramId("mech"), "Mech", ui::WvZzLookAndFeel::neonAmber);
-    initRotary(tubeKnob, paramId("tube"), "Tube", ui::WvZzLookAndFeel::neonAmber);
-    initRotary(bitKnob, paramId("bit"), "Bitcrush", ui::WvZzLookAndFeel::neonAmber);
-    initRotary(xcitaKnob, paramId("xcita"), "Xcita", ui::WvZzLookAndFeel::neonAmber);
+    initRotary(mechKnob, paramId("mech"), "Mech", ui::WvZzLookAndFeel::coralRed);
+    initRotary(tubeKnob, paramId("tube"), "Tube", ui::WvZzLookAndFeel::coralRed);
+    initRotary(bitKnob, paramId("bit"), "Bitcrush", ui::WvZzLookAndFeel::coralRed);
+    initRotary(xcitaKnob, paramId("xcita"), "Xcita", ui::WvZzLookAndFeel::coralRed);
 }
 
 void DistortionView::initRotary(RotaryControl& rc, const juce::String& paramId, const juce::String& labelText, juce::Colour accent)

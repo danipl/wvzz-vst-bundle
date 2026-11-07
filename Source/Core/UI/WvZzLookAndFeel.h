@@ -52,12 +52,24 @@ public:
     static const juce::Colour bgBase;
     static const juce::Colour cardBg;
     static const juce::Colour cardBorder;
-    static const juce::Colour neonGreen;
-    static const juce::Colour neonAmber;
-    static const juce::Colour neonCyan;
+    static const juce::Colour cardHighlight;
     static const juce::Colour trackBg;
     static const juce::Colour textPrimary;
     static const juce::Colour textSecondary;
+
+    // Curated Luminous Module Palette
+    static const juce::Colour coralRed;       // Distortion (Ember / Coral)
+    static const juce::Colour skyCyan;        // Magic EQ (Electric Sky)
+    static const juce::Colour honeyGold;      // Compressor (Warm Honey / Ochre)
+    static const juce::Colour emeraldGreen;   // MM Filter (Vivid Emerald)
+    static const juce::Colour electricViolet; // Flanger (Violet / Purple)
+    static const juce::Colour warmAmber;      // BP Filter (Warm Brass / Amber)
+    static const juce::Colour arcticIce;      // Master (Arctic Ice White)
+
+    // Legacy Aliases
+    static const juce::Colour neonGreen;
+    static const juce::Colour neonAmber;
+    static const juce::Colour neonCyan;
 };
 
 // Backward-compatibility alias

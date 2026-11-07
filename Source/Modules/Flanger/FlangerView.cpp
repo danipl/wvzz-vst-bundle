@@ -7,7 +7,7 @@ FlangerView::FlangerView(juce::AudioProcessorValueTreeState& apvts,
                          ui::IHelpOverlayHost* helpHost)
     : apvtsState(apvts),
       instancePrefix(prefix),
-      card("FLANGER", ui::WvZzLookAndFeel::neonCyan)
+      card("FLANGER", ui::WvZzLookAndFeel::electricViolet)
 {
     addAndMakeVisible(card);
 
@@ -33,8 +33,8 @@ FlangerView::FlangerView(juce::AudioProcessorValueTreeState& apvts,
     }
 
     // Rotary Knobs: Rate, Amount
-    initRotary(rateKnob,   paramId("rate"),   "Rate",   ui::WvZzLookAndFeel::neonCyan);
-    initRotary(amountKnob, paramId("amount"), "Amount", ui::WvZzLookAndFeel::neonCyan);
+    initRotary(rateKnob,   paramId("rate"),   "Rate",   ui::WvZzLookAndFeel::electricViolet);
+    initRotary(amountKnob, paramId("amount"), "Amount", ui::WvZzLookAndFeel::electricViolet);
 }
 
 void FlangerView::initRotary(RotaryControl& rc, const juce::String& paramId, const juce::String& labelText, juce::Colour accent)

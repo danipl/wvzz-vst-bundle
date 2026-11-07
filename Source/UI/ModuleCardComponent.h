@@ -22,40 +22,56 @@ public:
 
     void paint(juce::Graphics& g) override
     {
-        auto bounds = getLocalBounds().toFloat().reduced(1.0f);
+        auto bounds = getLocalBounds().toFloat().reduced(0.5f);
 
-        // 1. Card Background
-        g.setColour(isBypassed ? CamelPhatLookAndFeel::cardBg.darker(0.1f) : CamelPhatLookAndFeel::cardBg);
+        // 1. Translucent Dark Glass Card Background
+        const auto topBg = isBypassed ? CamelPhatLookAndFeel::cardBg.darker(0.25f) : CamelPhatLookAndFeel::cardBg;
+        const auto botBg = isBypassed ? CamelPhatLookAndFeel::cardBg.darker(0.45f) : CamelPhatLookAndFeel::cardBg.darker(0.2f);
+        juce::ColourGradient bgGrad(topBg, bounds.getCentreX(), bounds.getY(),
+                                    botBg, bounds.getCentreX(), bounds.getBottom(), false);
+        g.setGradientFill(bgGrad);
         g.fillRoundedRectangle(bounds, 6.0f);
 
-        // 2. Card Border
-        g.setColour(isBypassed ? CamelPhatLookAndFeel::cardBorder.withAlpha(0.5f) : CamelPhatLookAndFeel::cardBorder);
+        // 2. Refined Hairline Border with Top-Down Light Catch
+        const auto topBorder = isBypassed ? CamelPhatLookAndFeel::cardHighlight.withAlpha(0.2f)
+                                          : CamelPhatLookAndFeel::cardHighlight.withAlpha(0.55f);
+        const auto botBorder = isBypassed ? CamelPhatLookAndFeel::cardBorder.withAlpha(0.2f)
+                                          : CamelPhatLookAndFeel::cardBorder.withAlpha(0.35f);
+        juce::ColourGradient borderGrad(topBorder, bounds.getCentreX(), bounds.getY(),
+                                        botBorder, bounds.getCentreX(), bounds.getBottom(), false);
+        g.setGradientFill(borderGrad);
         g.drawRoundedRectangle(bounds, 6.0f, 1.0f);
 
         // 3. Header Bar Area
         auto headerArea = bounds.removeFromTop(28.0f);
-        headerArea.reduce(8.0f, 0.0f);
+        headerArea.reduce(10.0f, 0.0f);
 
-        // Accent indicator dot (dimmed when bypassed)
-        const float dotSize = 6.0f;
+        // Luminous accent indicator dot with soft aura (dimmed when bypassed)
+        const float dotSize = 5.0f;
         const float dotY = headerArea.getCentreY() - dotSize * 0.5f;
-        g.setColour(isBypassed ? CamelPhatLookAndFeel::textSecondary.withAlpha(0.5f) : accentColor);
-        g.fillEllipse(headerArea.getX(), dotY, dotSize, dotSize);
+        const float dotX = headerArea.getX();
 
-        // Title text
-        g.setColour(isBypassed ? CamelPhatLookAndFeel::textSecondary : CamelPhatLookAndFeel::textPrimary);
-        g.setFont(juce::FontOptions(12.5f, juce::Font::bold));
+        if (!isBypassed)
+        {
+            g.setColour(accentColor.withAlpha(0.25f));
+            g.fillEllipse(dotX - 1.5f, dotY - 1.5f, dotSize + 3.0f, dotSize + 3.0f);
+        }
+
+        g.setColour(isBypassed ? CamelPhatLookAndFeel::textSecondary.withAlpha(0.4f) : accentColor);
+        g.fillEllipse(dotX, dotY, dotSize, dotSize);
+
+        // Clean, letter-spaced uppercase title text
+        g.setColour(isBypassed ? CamelPhatLookAndFeel::textSecondary.withAlpha(0.5f) : CamelPhatLookAndFeel::textPrimary);
+        g.setFont(juce::FontOptions(11.5f, juce::Font::bold));
         auto titleArea = headerArea.withTrimmedLeft(12.0f);
         g.drawText(title, titleArea, juce::Justification::centredLeft, true);
 
-        // Divider line below header
-        g.setColour(CamelPhatLookAndFeel::cardBorder.withAlpha(0.6f));
-        g.drawHorizontalLine(28, bounds.getX(), bounds.getRight());
+        // Note: Hard horizontal divider line intentionally removed for sleek modern dark glass aesthetic
     }
 
     [[nodiscard]] juce::Rectangle<int> getContentBounds() const noexcept
     {
-        return getBounds().reduced(8).withTrimmedTop(32);
+        return getLocalBounds().reduced(8).withTrimmedTop(30);
     }
 
     /**

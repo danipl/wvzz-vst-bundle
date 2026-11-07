@@ -22,9 +22,9 @@ void CompressorView::GRMeterComponent::paint(juce::Graphics& g)
         const float meterH = bounds.getHeight() * norm;
         auto meterRect = juce::Rectangle<float>(bounds.getX() + 1.0f, bounds.getY() + 1.0f,
                                                 bounds.getWidth() - 2.0f, meterH);
-        juce::ColourGradient grGrad(ui::WvZzLookAndFeel::neonAmber,
+        juce::ColourGradient grGrad(ui::WvZzLookAndFeel::honeyGold,
                                     bounds.getX(), bounds.getY(),
-                                    juce::Colour(0xffff1744),
+                                    ui::WvZzLookAndFeel::coralRed,
                                     bounds.getX(), bounds.getBottom(), false);
         g.setGradientFill(grGrad);
         g.fillRoundedRectangle(meterRect, 2.0f);
@@ -43,7 +43,7 @@ CompressorView::CompressorView(juce::AudioProcessorValueTreeState& apvts,
     : apvtsState(apvts),
       instancePrefix(prefix),
       meter(meterSource),
-      card("COMPRESSOR", ui::WvZzLookAndFeel::neonGreen)
+      card("COMPRESSOR", ui::WvZzLookAndFeel::honeyGold)
 {
     addAndMakeVisible(card);
 
@@ -69,13 +69,13 @@ CompressorView::CompressorView(juce::AudioProcessorValueTreeState& apvts,
     }
 
     // Rotary Knobs: Amount, Release
-    initRotary(amountKnob,  paramId("amount"),  "Amount",  ui::WvZzLookAndFeel::neonGreen);
-    initRotary(releaseKnob, paramId("release"), "Release", ui::WvZzLookAndFeel::neonGreen);
+    initRotary(amountKnob,  paramId("amount"),  "Amount",  ui::WvZzLookAndFeel::honeyGold);
+    initRotary(releaseKnob, paramId("release"), "Release", ui::WvZzLookAndFeel::honeyGold);
 
     // Phat Mode Toggle
     phatToggle.button.setButtonText("PHAT");
     phatToggle.button.getProperties().set("isPill", true);
-    phatToggle.button.getProperties().set("accentColor", static_cast<int>(ui::WvZzLookAndFeel::neonGreen.getARGB()));
+    phatToggle.button.getProperties().set("accentColor", static_cast<int>(ui::WvZzLookAndFeel::honeyGold.getARGB()));
     phatToggle.attachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
         apvtsState, paramId("phat"), phatToggle.button);
     addAndMakeVisible(phatToggle.button);
