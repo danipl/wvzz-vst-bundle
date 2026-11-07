@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/danipl/wvzz-vst-bundle/compare/v0.2.0...v0.3.0) (2026-11-07)
+
+
+### Features
+
+* **distortion:** add hard clip, wavefold, kick tok pre-eq, mono bass and beat-synced lfo ([#7](https://github.com/danipl/wvzz-vst-bundle/issues/7)) ([13cacdd](https://github.com/danipl/wvzz-vst-bundle/commit/13cacdd229d7e6934e93f0afd7ed7b4714095f2b))
+
 ## [0.2.0](https://github.com/danipl/wvzz-vst-bundle/compare/v0.1.0...v0.2.0) (2026-11-03)
 
 
