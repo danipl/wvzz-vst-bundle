@@ -11,7 +11,7 @@ MasterView::MasterView(juce::AudioProcessorValueTreeState& apvts,
       instancePrefix(prefix),
       outMeter(outMeterSource),
       inMeter(inMeterSource),
-      card("MASTER", ui::WvZzLookAndFeel::neonGreen)
+      card("MASTER", ui::WvZzLookAndFeel::arcticIce)
 {
     addAndMakeVisible(card);
 
@@ -37,21 +37,21 @@ MasterView::MasterView(juce::AudioProcessorValueTreeState& apvts,
     }
 
     // Rotary Knobs: In Gain, Dry/Wet, Volume
-    initRotary(inputGainKnob, "input_gain", "In Gain", ui::WvZzLookAndFeel::neonGreen);
-    initRotary(mixKnob, paramId("mix"), "Dry/Wet", ui::WvZzLookAndFeel::neonGreen);
-    initRotary(volKnob, paramId("vol"), "Volume", ui::WvZzLookAndFeel::neonGreen);
+    initRotary(inputGainKnob, "input_gain", "In Gain", ui::WvZzLookAndFeel::arcticIce);
+    initRotary(mixKnob, paramId("mix"), "Dry/Wet", ui::WvZzLookAndFeel::arcticIce);
+    initRotary(volKnob, paramId("vol"), "Volume", ui::WvZzLookAndFeel::arcticIce);
 
     // Pill toggles: CLIP and MONO (<120Hz)
     clipToggle.button.setButtonText("CLIP");
     clipToggle.button.getProperties().set("isPill", true);
-    clipToggle.button.getProperties().set("accentColor", static_cast<int>(ui::WvZzLookAndFeel::neonGreen.getARGB()));
+    clipToggle.button.getProperties().set("accentColor", static_cast<int>(ui::WvZzLookAndFeel::warmAmber.getARGB()));
     clipToggle.attachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
         apvtsState, paramId("clip"), clipToggle.button);
     addAndMakeVisible(clipToggle.button);
 
     monoBassToggle.button.setButtonText("MONO");
     monoBassToggle.button.getProperties().set("isPill", true);
-    monoBassToggle.button.getProperties().set("accentColor", static_cast<int>(ui::WvZzLookAndFeel::neonGreen.getARGB()));
+    monoBassToggle.button.getProperties().set("accentColor", static_cast<int>(ui::WvZzLookAndFeel::arcticIce.getARGB()));
     monoBassToggle.attachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
         apvtsState, paramId("mono_bass"), monoBassToggle.button);
     addAndMakeVisible(monoBassToggle.button);

@@ -144,14 +144,14 @@ void CamelPhatAudioProcessorEditor::CompressorGRMeter::paint(juce::Graphics& g)
 CamelPhatAudioProcessorEditor::CamelPhatAudioProcessorEditor(CamelPhatAudioProcessor& proc)
     : AudioProcessorEditor(proc),
       audioProcessor(proc),
-      bpFilterCard("BP FILTER & SPLIT", camelphat::ui::CamelPhatLookAndFeel::neonCyan),
-      distCard("DISTORTION", camelphat::ui::CamelPhatLookAndFeel::neonAmber),
-      centerModCard("MODULATION & X/Y", camelphat::ui::CamelPhatLookAndFeel::neonGreen),
-      mmFilterCard("MM FILTER", camelphat::ui::CamelPhatLookAndFeel::neonGreen),
-      flangerCard("FLANGER", camelphat::ui::CamelPhatLookAndFeel::neonCyan),
-      magicEqCard("MAGIC EQ", camelphat::ui::CamelPhatLookAndFeel::neonAmber),
-      compCard("COMPRESSOR", camelphat::ui::CamelPhatLookAndFeel::neonGreen),
-      masterCard("MASTER", camelphat::ui::CamelPhatLookAndFeel::neonGreen),
+      bpFilterCard("BP FILTER & SPLIT", camelphat::ui::CamelPhatLookAndFeel::warmAmber),
+      distCard("DISTORTION", camelphat::ui::CamelPhatLookAndFeel::coralRed),
+      centerModCard("MODULATION & X/Y", camelphat::ui::CamelPhatLookAndFeel::skyCyan),
+      mmFilterCard("MM FILTER", camelphat::ui::CamelPhatLookAndFeel::emeraldGreen),
+      flangerCard("FLANGER", camelphat::ui::CamelPhatLookAndFeel::electricViolet),
+      magicEqCard("MAGIC EQ", camelphat::ui::CamelPhatLookAndFeel::skyCyan),
+      compCard("COMPRESSOR", camelphat::ui::CamelPhatLookAndFeel::honeyGold),
+      masterCard("MASTER", camelphat::ui::CamelPhatLookAndFeel::arcticIce),
       bpHelp("bp_filter", *this),
       distHelp("distortion", *this),
       centerModHelp("xy_pad", *this),
@@ -918,17 +918,17 @@ void CamelPhatAudioProcessorEditor::setCenterTab(bool showMonitor)
     showingMonitor = showMonitor;
 
     xyTabButton.setColour(juce::TextButton::buttonColourId,
-        !showingMonitor ? camelphat::ui::CamelPhatLookAndFeel::neonGreen.withAlpha(0.25f)
+        !showingMonitor ? camelphat::ui::CamelPhatLookAndFeel::skyCyan.withAlpha(0.25f)
                         : camelphat::ui::CamelPhatLookAndFeel::cardBg.darker(0.2f));
     xyTabButton.setColour(juce::TextButton::textColourOffId,
-        !showingMonitor ? camelphat::ui::CamelPhatLookAndFeel::neonGreen
+        !showingMonitor ? camelphat::ui::CamelPhatLookAndFeel::skyCyan
                         : camelphat::ui::CamelPhatLookAndFeel::textSecondary);
 
     monitorTabButton.setColour(juce::TextButton::buttonColourId,
-        showingMonitor ? camelphat::ui::CamelPhatLookAndFeel::neonCyan.withAlpha(0.25f)
+        showingMonitor ? camelphat::ui::CamelPhatLookAndFeel::skyCyan.withAlpha(0.25f)
                        : camelphat::ui::CamelPhatLookAndFeel::cardBg.darker(0.2f));
     monitorTabButton.setColour(juce::TextButton::textColourOffId,
-        showingMonitor ? camelphat::ui::CamelPhatLookAndFeel::neonCyan
+        showingMonitor ? camelphat::ui::CamelPhatLookAndFeel::skyCyan
                        : camelphat::ui::CamelPhatLookAndFeel::textSecondary);
 
     xyPad.setVisible(!showingMonitor);
@@ -943,6 +943,5 @@ void CamelPhatAudioProcessorEditor::setCenterTab(bool showMonitor)
 
     signalVisualizer.setVisible(showingMonitor);
     centerModCard.setTitle(showingMonitor ? "ANALYSIS & MONITOR" : "MODULATION & X/Y");
-    centerModCard.setAccentColor(showingMonitor ? camelphat::ui::CamelPhatLookAndFeel::neonCyan
-                                               : camelphat::ui::CamelPhatLookAndFeel::neonGreen);
+    centerModCard.setAccentColor(camelphat::ui::CamelPhatLookAndFeel::skyCyan);
 }

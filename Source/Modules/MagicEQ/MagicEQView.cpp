@@ -7,7 +7,7 @@ MagicEQView::MagicEQView(juce::AudioProcessorValueTreeState& apvts,
                          ui::IHelpOverlayHost* helpHost)
     : apvtsState(apvts),
       instancePrefix(prefix),
-      card("MAGIC EQ", ui::WvZzLookAndFeel::neonAmber)
+      card("MAGIC EQ", ui::WvZzLookAndFeel::skyCyan)
 {
     addAndMakeVisible(card);
 
@@ -33,13 +33,13 @@ MagicEQView::MagicEQView(juce::AudioProcessorValueTreeState& apvts,
     }
 
     // Rotary Knobs: Amount, Tune
-    initRotary(amountKnob, paramId("amount"), "Amount", true, ui::WvZzLookAndFeel::neonAmber);
-    initRotary(tuneKnob,   paramId("tune"),   "Tune",   false, ui::WvZzLookAndFeel::neonAmber);
+    initRotary(amountKnob, paramId("amount"), "Amount", true, ui::WvZzLookAndFeel::skyCyan);
+    initRotary(tuneKnob,   paramId("tune"),   "Tune",   false, ui::WvZzLookAndFeel::skyCyan);
 
     // Phat Mode Toggle Button
     phatToggle.button.setButtonText("PHAT");
     phatToggle.button.getProperties().set("isPill", true);
-    phatToggle.button.getProperties().set("accentColor", static_cast<int>(ui::WvZzLookAndFeel::neonAmber.getARGB()));
+    phatToggle.button.getProperties().set("accentColor", static_cast<int>(ui::WvZzLookAndFeel::skyCyan.getARGB()));
     phatToggle.attachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
         apvtsState, paramId("phat"), phatToggle.button);
     addAndMakeVisible(phatToggle.button);
@@ -47,7 +47,7 @@ MagicEQView::MagicEQView(juce::AudioProcessorValueTreeState& apvts,
     // Pre Dist Toggle Button
     preToggle.button.setButtonText("PRE");
     preToggle.button.getProperties().set("isPill", true);
-    preToggle.button.getProperties().set("accentColor", static_cast<int>(ui::WvZzLookAndFeel::neonAmber.getARGB()));
+    preToggle.button.getProperties().set("accentColor", static_cast<int>(ui::WvZzLookAndFeel::skyCyan.getARGB()));
     preToggle.attachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
         apvtsState, paramId("pre"), preToggle.button);
     addAndMakeVisible(preToggle.button);
