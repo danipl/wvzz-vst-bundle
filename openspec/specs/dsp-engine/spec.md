@@ -72,11 +72,23 @@ The system SHALL provide a Pultec-style resonant low-end enhancer (`Magic EQ`) f
 - **THEN** `Magic EQ` processes the passband signal immediately before `Distortion` (and skips post-Flanger processing), driving the resonant peak at `meq_tune` directly into the 4-stage saturator to create pitched Hardstyle kick tails
 
 ### Requirement: Optical Compressor with Phat Mode
-The system SHALL provide a one-knob feed-forward compressor where `comp_amount` (`0.0`–`1.0`) simultaneously drives Threshold (`0 dB` down to `-36 dB`) and calculated Auto-Makeup Gain (`0 dB` to `+14 dB`) with adjustable release `comp_release` (`10.0`–`1500.0 ms`, default `120.0 ms`), operating in Normal Mode (`comp_phat = 0`: Attack `3.5 ms`, Ratio `3.5:1`, Soft Knee `6 dB`) or Phat Mode (`comp_phat = 1`: Attack `0.8 ms`, Ratio `12:1`, Hard Knee `1 dB`, plus a post-makeup `tanh` soft-clip ceiling at `-0.1 dBFS`).
+The system SHALL provide a feed-forward optical compressor supporting independent parameters for Threshold `comp_thresh` (`-48.0` to `0.0 dB`, default `-18.0 dB`), Ratio `comp_ratio` (`1.5:1` to `20.0:1`, default `4.0:1`), Attack `comp_attack` (`0.1` to `50.0 ms`, default `5.0 ms`), Release `comp_release` (`10.0` to `1500.0 ms`, default `120.0 ms`), and parallel Mix `comp_mix` (`0.0` to `1.0`, default `1.0`), alongside legacy `comp_amount` drive compatibility, operating with decibel-domain dual-stage optical release ballistics, dynamic auto-makeup compensation, and a selectable Phat Mode (`comp_phat = 1`) featuring a post-makeup 1st-order ADAA `tanh` soft-clip ceiling at `-0.1 dBFS`.
 
 #### Scenario: Dynamic compression with Phat saturation
-- **WHEN** `comp_amount` is increased and `comp_phat` is toggled between `0` and `1`
-- **THEN** the compressor switches between smooth `3.5:1` leveling (`3.5 ms` attack, `6 dB` knee) and aggressive `12:1` brickwall smashing (`0.8 ms` attack, `1 dB` knee, `-0.1 dBFS` soft-clip ceiling) with automatic makeup gain
+- **WHEN** `comp_thresh` is set below signal level and `comp_phat` is toggled between `0` and `1`
+- **THEN** the compressor applies gain reduction based on `comp_thresh`, `comp_ratio`, `comp_attack`, and `comp_release`, switching between clean leveling and aggressive brickwall saturation with a `-0.1 dBFS` ADAA soft-clip ceiling
+
+#### Scenario: Dual-stage optical release behavior
+- **WHEN** a transient exceeds the compressor threshold and subsequently falls below threshold
+- **THEN** the gain reduction decays in the decibel domain with a fast initial recovery stage (~50% of attenuation over 40–70 ms) followed by an exponential program-dependent tail stage scaled by `comp_release`
+
+#### Scenario: Anti-aliased Phat saturation ceiling
+- **WHEN** audio is processed in Phat Mode (`comp_phat = 1`) with peak levels exceeding the `-0.1 dBFS` ceiling
+- **THEN** the saturation stage evaluates the 1st-order ADAA antiderivative of `tanh` across consecutive samples, suppressing digital foldback aliasing with zero latency
+
+#### Scenario: Parallel compression blend
+- **WHEN** `comp_mix` is adjusted between `0.0` and `1.0`
+- **THEN** the output linearly crossfades between the uncompressed input audio and the compressed/saturated wet signal
 
 ### Requirement: Master Mix and Output Gain
 The system SHALL delay the dry input signal by a buffer matching the active wet-chain oversampling latency, blend the latency-compensated dry signal with the wet chain via `master_mix` (`0.0`–`1.0`, default `1.0`), apply `master_vol` (`-36.0` to `+12.0 dB`, default `0.0 dB`) modulated by `ModTarget::MasterVol`, optionally sum sub-bass frequencies below `120.0 Hz` to mono when `master_mono_bass` (`1`) is enabled, optionally clamp output peaks to `0.0 dBFS` when `master_clip` (`1`, default `1`) is enabled, and support a click-free smoothed crossfaded global `master_bypass`.

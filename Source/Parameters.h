@@ -51,6 +51,10 @@ namespace ParameterIDs {
     inline constexpr auto compAmount     = "comp_amount";
     inline constexpr auto compRelease    = "comp_release";
     inline constexpr auto compPhat       = "comp_phat";
+    inline constexpr auto compThresh     = "comp_thresh";
+    inline constexpr auto compRatio      = "comp_ratio";
+    inline constexpr auto compAttack     = "comp_attack";
+    inline constexpr auto compMix        = "comp_mix";
 
     // Master
     inline constexpr auto masterMix      = "master_mix";
@@ -232,6 +236,10 @@ struct CompressorParams
     std::atomic<float>* amount       { nullptr };
     std::atomic<float>* release      { nullptr };
     std::atomic<float>* phat         { nullptr };
+    std::atomic<float>* thresh       { nullptr };
+    std::atomic<float>* ratio        { nullptr };
+    std::atomic<float>* attack       { nullptr };
+    std::atomic<float>* mix          { nullptr };
 };
 
 struct MasterParams
@@ -438,6 +446,16 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
         juce::ParameterID{ ParameterIDs::compRelease, 1 }, "Compressor Release", compRelSkew, 120.0f));
     layout.add(std::make_unique<juce::AudioParameterBool>(
         juce::ParameterID{ ParameterIDs::compPhat, 1 }, "Compressor Phat Mode", false));
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{ ParameterIDs::compThresh, 1 }, "Compressor Threshold", -48.0f, 0.0f, -18.0f));
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{ ParameterIDs::compRatio, 1 }, "Compressor Ratio",
+        juce::NormalisableRange<float>(1.5f, 20.0f, 0.1f, 0.5f), 4.0f));
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{ ParameterIDs::compAttack, 1 }, "Compressor Attack",
+        juce::NormalisableRange<float>(0.1f, 50.0f, 0.1f, 0.4f), 5.0f));
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{ ParameterIDs::compMix, 1 }, "Compressor Mix", 0.0f, 1.0f, 1.0f));
 
     // Modulation: LFO 1
     layout.add(std::make_unique<juce::AudioParameterChoice>(

@@ -32,9 +32,44 @@ public:
         return gainReductionDb.load(std::memory_order_relaxed);
     }
 
-    void setParameters(float amountNorm, float releaseMs, bool phatModeEnabled, bool bypass = false) noexcept;
+    [[nodiscard]] float getGainReductionDb() const noexcept
+    {
+        return getGainReduction();
+    }
+
+    [[nodiscard]] bool isSaturating() const noexcept
+    {
+        return saturationActivity.load(std::memory_order_relaxed) > 0.5f;
+    }
+
+    void setParameters(float amountNorm, float releaseMs, bool phatModeEnabled, bool bypass = false,
+                       float threshDb = -18.0f, float ratioVal = 4.0f, float attackMsVal = 5.0f, float mixVal = 1.0f) noexcept;
 
 private:
+    static inline float adaaAntiderivative(float x) noexcept
+    {
+        const float absX = std::abs(x);
+        if (absX > 16.0f)
+            return absX - 0.69314718056f; // ln(2)
+        return std::log(std::cosh(x));
+    }
+
+    static inline float processADAA(float x, float& prevX) noexcept
+    {
+        const float delta = x - prevX;
+        float y = 0.0f;
+        if (std::abs(delta) > 1.0e-5f)
+        {
+            y = (adaaAntiderivative(x) - adaaAntiderivative(prevX)) / delta;
+        }
+        else
+        {
+            y = std::tanh(0.5f * (x + prevX));
+        }
+        prevX = x;
+        return y;
+    }
+
     juce::String instancePrefix;
     double sampleRate { 44100.0 };
 
@@ -42,12 +77,24 @@ private:
     std::atomic<float>* amountParam  { nullptr };
     std::atomic<float>* releaseParam { nullptr };
     std::atomic<float>* phatParam    { nullptr };
+    std::atomic<float>* threshParam  { nullptr };
+    std::atomic<float>* ratioParam   { nullptr };
+    std::atomic<float>* attackParam  { nullptr };
+    std::atomic<float>* mixParam     { nullptr };
 
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> amountSmoothed;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> releaseSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> threshSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> ratioSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> attackSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> mixSmoothed;
 
-    float envelope { 0.0f };
+    float fastEnvelopeDb { 0.0f };
+    float slowEnvelopeDb { 0.0f };
+    float prevInNormL    { 0.0f };
+    float prevInNormR    { 0.0f };
     std::atomic<float> gainReductionDb { 0.0f };
+    std::atomic<float> saturationActivity { 0.0f };
 };
 
 } // namespace wvzz::modules

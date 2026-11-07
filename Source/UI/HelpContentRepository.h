@@ -98,13 +98,17 @@ private:
         };
 
         topics["compressor"] = {
-            "Compressor (CamelCrusher / Phat Dynamics)",
-            "Characterful one-knob feed-forward compressor with auto-makeup gain and output safety soft-clipper.",
-            "Stage 6: Dynamics & Slam",
+            "Compressor (Optical Dynamics & Glue)",
+            "Studio-grade optical feed-forward compressor with dual-stage release ballistics, dynamic auto-makeup gain, and Anti-Derivative Anti-Aliasing (ADAA) saturation.",
+            "Stage 6: Dynamics & Parallel Compression",
             {
-                "Amount: Simultaneously drives threshold (0 to -36 dB) and auto-makeup (0 to +14 dB).",
-                "Release: Recovery speed (10 to 1500 ms).",
-                "Phat Mode (P): Switches from 3.5:1 leveling to 12:1 smash with -0.1 dBFS tanh ceiling."
+                "Thresh: Sets the compression threshold (-48 to 0 dB).",
+                "Ratio: Sets compression slope (1.5:1 gentle leveling to 20:1 brickwall limiting).",
+                "Attack: Sets onset reaction time (0.1 ms fast clamping to 50 ms transient punch).",
+                "Release: Dual-stage optical decay timing with fast initial recovery (~50 ms) and program-dependent tail (10 to 1500 ms).",
+                "Mix: Dry/wet parallel compression blend (0% dry to 100% wet).",
+                "Phat Mode (P): Engages -0.1 dBFS ceiling soft-clipping with zero-latency 1st-order ADAA anti-aliasing.",
+                "GR Meter: Wide horizontal gain-reduction display with analog ballistics, calibrated dB ticks, and floating peak-hold."
             }
         };
 

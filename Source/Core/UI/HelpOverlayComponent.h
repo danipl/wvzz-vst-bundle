@@ -26,13 +26,44 @@ public:
 
     ~HelpOverlayComponent() override = default;
 
+    static juce::TextLayout createOverviewLayout(const juce::String& text, float maxWidth)
+    {
+        juce::AttributedString attr;
+        attr.append(text, juce::FontOptions(11.0f, juce::Font::plain), WvZzLookAndFeel::textPrimary);
+        attr.setWordWrap(juce::AttributedString::WordWrap::byWord);
+        attr.setJustification(juce::Justification::topLeft);
+
+        juce::TextLayout layout;
+        layout.createLayout(attr, maxWidth);
+        return layout;
+    }
+
     void displayTopic(const HelpTopic& topic, juce::Rectangle<int> targetScreenBounds, juce::Component* parentContainer)
     {
         currentTopic = topic;
         setVisible(true);
 
-        const int cardWidth = 340;
-        const int cardHeight = 160 + static_cast<int>(topic.parameterTips.size()) * 26;
+        const int cardWidth = 360;
+        const float contentWidth = static_cast<float>(cardWidth - 26);
+
+        // Measure dynamic text layout height for description
+        auto overviewLayout = createOverviewLayout(topic.overview, contentWidth);
+        const float overviewH = std::ceil(overviewLayout.getHeight());
+
+        // Header: 32 + Margins: 16 (8 top, 8 bot)
+        int baseHeight = 32 + 16;
+        if (topic.signalRole.isNotEmpty())
+            baseHeight += 24; // 18 tag + 6 gap
+
+        constexpr float gapBetweenOverviewAndList = 10.0f;
+        const int tipsCount = static_cast<int>(topic.parameterTips.size());
+        constexpr int tipRowHeight = 24;
+
+        const int cardHeight = baseHeight
+                             + static_cast<int>(overviewH)
+                             + static_cast<int>(gapBetweenOverviewAndList)
+                             + (tipsCount * tipRowHeight)
+                             + 8; // Bottom breathing room
 
         auto parentBounds = parentContainer->getLocalBounds();
         // Convert screen target bounds into parent container's local coordinates
@@ -49,6 +80,8 @@ public:
 
         if (y + cardHeight > parentBounds.getBottom() - 12)
             y = localTargetRect.getY() - cardHeight - 6;
+        if (y < 12)
+            y = 12;
 
         setBounds(x, y, cardWidth, cardHeight);
         closeButton.setBounds(cardWidth - 28, 8, 20, 20);
@@ -88,34 +121,43 @@ public:
         if (currentTopic.signalRole.isNotEmpty())
         {
             auto tagArea = contentArea.removeFromTop(18.0f);
+            auto tagFont = juce::FontOptions(10.0f, juce::Font::bold);
+            g.setFont(tagFont);
+            const float textW = juce::Font(tagFont).getStringWidthFloat(currentTopic.signalRole) + 16.0f;
             g.setColour(WvZzLookAndFeel::neonAmber.withAlpha(0.15f));
-            g.fillRoundedRectangle(tagArea.withWidth(g.getCurrentFont().getStringWidth(currentTopic.signalRole) + 16.0f), 3.0f);
+            g.fillRoundedRectangle(tagArea.withWidth(textW), 3.0f);
             g.setColour(WvZzLookAndFeel::neonAmber);
-            g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
             g.drawText(currentTopic.signalRole, tagArea.withTrimmedLeft(6.0f), juce::Justification::centredLeft, false);
             contentArea.removeFromTop(6.0f);
         }
 
         // 4. Overview Body Text
-        g.setColour(WvZzLookAndFeel::textPrimary);
-        g.setFont(juce::FontOptions(11.0f, juce::Font::plain));
-        auto overviewArea = contentArea.removeFromTop(44.0f);
-        g.drawFittedText(currentTopic.overview, overviewArea.toNearestInt(), juce::Justification::topLeft, 3);
+        auto overviewLayout = createOverviewLayout(currentTopic.overview, contentArea.getWidth());
+        const float overviewHeight = std::ceil(overviewLayout.getHeight());
+        auto overviewArea = contentArea.removeFromTop(overviewHeight);
+        overviewLayout.draw(g, overviewArea);
+
+        // Constant, uniform distance between description and parameter tips list
+        constexpr float gapBetweenOverviewAndList = 10.0f;
+        contentArea.removeFromTop(gapBetweenOverviewAndList);
 
         // 5. Parameter Tips Bullet List
-        contentArea.removeFromTop(4.0f);
+        constexpr float bulletSize = 4.0f;
         for (const auto& tip : currentTopic.parameterTips)
         {
             auto tipArea = contentArea.removeFromTop(24.0f);
 
-            // Bullet icon
+            // Bullet icon aligned to exact vertical center of text row
+            const float bulletX = tipArea.getX() + 2.0f;
+            const float bulletY = tipArea.getY() + (tipArea.getHeight() - bulletSize) * 0.5f;
+
             g.setColour(WvZzLookAndFeel::neonCyan);
-            g.fillEllipse(tipArea.getX() + 2.0f, tipArea.getY() + 6.0f, 4.0f, 4.0f);
+            g.fillEllipse(bulletX, bulletY, bulletSize, bulletSize);
 
             // Tip text
             g.setColour(WvZzLookAndFeel::textSecondary);
             g.setFont(juce::FontOptions(10.5f, juce::Font::plain));
-            g.drawFittedText(tip, tipArea.withTrimmedLeft(12.0f).toNearestInt(), juce::Justification::centredLeft, 1);
+            g.drawFittedText(tip, tipArea.withTrimmedLeft(14.0f).toNearestInt(), juce::Justification::centredLeft, 1);
         }
     }
 
