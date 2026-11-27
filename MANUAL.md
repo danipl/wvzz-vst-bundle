@@ -44,12 +44,28 @@ A root [`Makefile`](Makefile) provides simple commands:
 
 | Command | Action |
 | :--- | :--- |
-| `make vst3` | Builds the `.vst3` bundle into `build/WvZzDistortion_artefacts/VST3/WvZz Distortion.vst3` |
-| `make standalone` | Builds the Standalone application into `build/WvZzDistortion_artefacts/Standalone/` |
-| `make install-vst3` | Builds and copies the `.vst3` bundle directly to `~/Library/Audio/Plug-Ins/VST3/` |
-| `make install-system` | Copies `.vst3` bundle to `/Library/Audio/Plug-Ins/VST3/` (requires `sudo`) |
+| `make build` | Builds everything: the `WvZzModules` library, every plugin (VST3 + Standalone), and the tests |
+| `make vst3` | Builds the `.vst3` bundle of every plugin into `build/<Target>_artefacts/Release/VST3/` |
+| `make standalone` | Builds the Standalone app of every plugin into `build/<Target>_artefacts/Release/Standalone/` |
+| `make distortion-vst3` / `make distortion-standalone` | Builds only WvZz Distortion |
+| `make dynamics-vst3` / `make dynamics-standalone` | Builds only WvZz Dynamics |
+| `make install` (or `make install-vst3`) | Builds, copies, and ad-hoc signs every `.vst3` bundle in `~/Library/Audio/Plug-Ins/VST3/` |
+| `make install-system` | Copies and signs every `.vst3` bundle in `/Library/Audio/Plug-Ins/VST3/` (requires `sudo`) |
 | `make test` | Runs the zero-allocation DSP quantitative tests (`wvzz_dsp_tests`) |
-| `make clean` | Cleans the build folder |
+| `make package` | Builds, tests, verifies Universal Binary + signature of every bundle, and writes the release zips to `dist/` |
+| `make status` | Shows which plugins are installed |
+| `make clean` | Removes the build folder |
+
+`make help` prints this list from the Makefile.
+
+### Adding a Plugin to the Build
+The build reads one plugin list. A new plugin needs three steps:
+
+1. Create `Plugins/<Target>/` with `PluginProcessor.h/.cpp`, `PluginEditor.h/.cpp`, and `Presets/FactoryPresets.h`.
+2. In [`CMakeLists.txt`](CMakeLists.txt), add one line: `wvzz_add_plugin(<Target> <PluginCode> "<Product Name>")`.
+3. In the [`Makefile`](Makefile), add `<Target>` to `PLUGIN_TARGETS` and define `KEY_<Target>` and `PRODUCT_<Target>`.
+
+`make vst3`, `make standalone`, `make install`, `make status`, and `make <key>-vst3` then include the new plugin.
 
 ---
 
@@ -59,7 +75,7 @@ A root [`Makefile`](Makefile) provides simple commands:
 ```bash
 make install-vst3
 ```
-This command compiles the Universal Binary VST3, copies it to `~/Library/Audio/Plug-Ins/VST3/`, and re-signs it with an ad-hoc signature.
+This command compiles every plugin as a Universal Binary VST3, copies each bundle to `~/Library/Audio/Plug-Ins/VST3/`, and re-signs it with an ad-hoc signature.
 
 ---
 

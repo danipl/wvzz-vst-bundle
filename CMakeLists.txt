@@ -149,125 +149,76 @@ target_link_libraries(WvZzModules
 )
 
 # ==============================================================================
-# Flagship Plugin Target: WvZzDistortion
+# Plugin Targets
+# wvzz_add_plugin(<Target> <PluginCode> <ProductName> [extra sources...])
+# Builds Plugins/<Target>/ as a VST3 + Standalone plugin linked to WvZzModules.
+# To add a plugin: create Plugins/<Target>/ with PluginProcessor.{h,cpp},
+# PluginEditor.{h,cpp}, and Presets/FactoryPresets.h, add one call below, and add
+# the target to PLUGIN_TARGETS in the Makefile.
 # ==============================================================================
-juce_add_plugin(WvZzDistortion
-    COMPANY_NAME "WvZz"
-    IS_SYNTH FALSE
-    NEEDS_MIDI_INPUT TRUE
-    NEEDS_MIDI_OUTPUT FALSE
-    IS_MIDI_EFFECT FALSE
-    EDITOR_WANTS_KEYBOARD_FOCUS FALSE
-    COPY_PLUGIN_AFTER_BUILD FALSE
-    PLUGIN_MANUFACTURER_CODE WvZz
-    PLUGIN_CODE WzDs
-    FORMATS VST3 Standalone
-    PRODUCT_NAME "WvZz Distortion"
-)
+function(wvzz_add_plugin TARGET CODE PRODUCT_NAME)
+    juce_add_plugin(${TARGET}
+        COMPANY_NAME "WvZz"
+        IS_SYNTH FALSE
+        NEEDS_MIDI_INPUT TRUE
+        NEEDS_MIDI_OUTPUT FALSE
+        IS_MIDI_EFFECT FALSE
+        EDITOR_WANTS_KEYBOARD_FOCUS FALSE
+        COPY_PLUGIN_AFTER_BUILD FALSE
+        PLUGIN_MANUFACTURER_CODE WvZz
+        PLUGIN_CODE ${CODE}
+        FORMATS VST3 Standalone
+        PRODUCT_NAME "${PRODUCT_NAME}"
+    )
 
-target_sources(WvZzDistortion
-    PRIVATE
-        Plugins/WvZzDistortion/PluginProcessor.h
-        Plugins/WvZzDistortion/PluginProcessor.cpp
-        Plugins/WvZzDistortion/PluginEditor.h
-        Plugins/WvZzDistortion/PluginEditor.cpp
-        Plugins/WvZzDistortion/Presets/FactoryPresets.h
-)
+    target_sources(${TARGET}
+        PRIVATE
+            Plugins/${TARGET}/PluginProcessor.h
+            Plugins/${TARGET}/PluginProcessor.cpp
+            Plugins/${TARGET}/PluginEditor.h
+            Plugins/${TARGET}/PluginEditor.cpp
+            Plugins/${TARGET}/Presets/FactoryPresets.h
+            ${ARGN}
+    )
 
-target_include_directories(WvZzDistortion PRIVATE Plugins/WvZzDistortion Source)
-target_compile_features(WvZzDistortion PRIVATE cxx_std_20)
+    target_include_directories(${TARGET} PRIVATE Plugins/${TARGET} Source)
+    target_compile_features(${TARGET} PRIVATE cxx_std_20)
 
-target_compile_definitions(WvZzDistortion
-    PUBLIC
-        JUCE_WEB_BROWSER=0
-        JUCE_USE_CURL=0
-        JUCE_VST3_CAN_REPLACE_VST2=0
-)
+    target_compile_definitions(${TARGET}
+        PUBLIC
+            JUCE_WEB_BROWSER=0
+            JUCE_USE_CURL=0
+            JUCE_VST3_CAN_REPLACE_VST2=0
+    )
 
-target_link_libraries(WvZzDistortion
-    PRIVATE
-        WvZzModules
-    PUBLIC
-        juce::juce_recommended_config_flags
-        juce::juce_recommended_lto_flags
-        juce::juce_recommended_warning_flags
-)
+    target_link_libraries(${TARGET}
+        PRIVATE
+            WvZzModules
+        PUBLIC
+            juce::juce_recommended_config_flags
+            juce::juce_recommended_lto_flags
+            juce::juce_recommended_warning_flags
+    )
 
-if(APPLE)
-    if(TARGET WvZzDistortion_VST3)
-        # Re-apply ad-hoc signature after juce_vst3_helper generates moduleinfo.json
-        add_custom_command(TARGET WvZzDistortion_VST3 POST_BUILD
-            COMMAND codesign --force --deep -s - "$<TARGET_BUNDLE_DIR:WvZzDistortion_VST3>"
-            COMMENT "Re-signing VST3 bundle after moduleinfo.json generation"
-        )
+    if(APPLE)
+        if(TARGET ${TARGET}_VST3)
+            # Re-apply ad-hoc signature after juce_vst3_helper generates moduleinfo.json
+            add_custom_command(TARGET ${TARGET}_VST3 POST_BUILD
+                COMMAND codesign --force --deep -s - "$<TARGET_BUNDLE_DIR:${TARGET}_VST3>"
+                COMMENT "Re-signing ${PRODUCT_NAME} VST3 bundle after moduleinfo.json generation"
+            )
+        endif()
+        if(TARGET ${TARGET}_Standalone)
+            add_custom_command(TARGET ${TARGET}_Standalone POST_BUILD
+                COMMAND codesign --force --deep -s - "$<TARGET_BUNDLE_DIR:${TARGET}_Standalone>"
+                COMMENT "Signing ${PRODUCT_NAME} Standalone app bundle"
+            )
+        endif()
     endif()
-    if(TARGET WvZzDistortion_Standalone)
-        add_custom_command(TARGET WvZzDistortion_Standalone POST_BUILD
-            COMMAND codesign --force --deep -s - "$<TARGET_BUNDLE_DIR:WvZzDistortion_Standalone>"
-            COMMENT "Signing Standalone app bundle"
-        )
-    endif()
-endif()
+endfunction()
 
-# ==============================================================================
-# Flagship Plugin Target: WvZzDynamics
-# ==============================================================================
-juce_add_plugin(WvZzDynamics
-    COMPANY_NAME "WvZz"
-    IS_SYNTH FALSE
-    NEEDS_MIDI_INPUT TRUE
-    NEEDS_MIDI_OUTPUT FALSE
-    IS_MIDI_EFFECT FALSE
-    EDITOR_WANTS_KEYBOARD_FOCUS FALSE
-    COPY_PLUGIN_AFTER_BUILD FALSE
-    PLUGIN_MANUFACTURER_CODE WvZz
-    PLUGIN_CODE WzDy
-    FORMATS VST3 Standalone
-    PRODUCT_NAME "WvZz Dynamics"
-)
-
-target_sources(WvZzDynamics
-    PRIVATE
-        Plugins/WvZzDynamics/PluginProcessor.h
-        Plugins/WvZzDynamics/PluginProcessor.cpp
-        Plugins/WvZzDynamics/PluginEditor.h
-        Plugins/WvZzDynamics/PluginEditor.cpp
-        Plugins/WvZzDynamics/Presets/FactoryPresets.h
-)
-
-target_include_directories(WvZzDynamics PRIVATE Plugins/WvZzDynamics Source)
-target_compile_features(WvZzDynamics PRIVATE cxx_std_20)
-
-target_compile_definitions(WvZzDynamics
-    PUBLIC
-        JUCE_WEB_BROWSER=0
-        JUCE_USE_CURL=0
-        JUCE_VST3_CAN_REPLACE_VST2=0
-)
-
-target_link_libraries(WvZzDynamics
-    PRIVATE
-        WvZzModules
-    PUBLIC
-        juce::juce_recommended_config_flags
-        juce::juce_recommended_lto_flags
-        juce::juce_recommended_warning_flags
-)
-
-if(APPLE)
-    if(TARGET WvZzDynamics_VST3)
-        add_custom_command(TARGET WvZzDynamics_VST3 POST_BUILD
-            COMMAND codesign --force --deep -s - "$<TARGET_BUNDLE_DIR:WvZzDynamics_VST3>"
-            COMMENT "Re-signing WvZz Dynamics VST3 bundle after moduleinfo.json generation"
-        )
-    endif()
-    if(TARGET WvZzDynamics_Standalone)
-        add_custom_command(TARGET WvZzDynamics_Standalone POST_BUILD
-            COMMAND codesign --force --deep -s - "$<TARGET_BUNDLE_DIR:WvZzDynamics_Standalone>"
-            COMMENT "Signing WvZz Dynamics Standalone app bundle"
-        )
-    endif()
-endif()
+wvzz_add_plugin(WvZzDistortion WzDs "WvZz Distortion")
+wvzz_add_plugin(WvZzDynamics   WzDy "WvZz Dynamics")
 
 # ==============================================================================
 # Headless DSP Test Target: wvzz_dsp_tests
