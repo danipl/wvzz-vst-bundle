@@ -10,11 +10,13 @@ namespace wvzz {
 enum class ModProfile : int
 {
     Distortion = 0,
-    Dynamics
+    Dynamics,
+    Modulation
 };
 
 /**
- * @brief Modulatable Targets Enum across WvZz Distortion (0..21) and WvZz Dynamics (22..33).
+ * @brief Modulatable Targets Enum across WvZz Distortion (0..21), WvZz Dynamics (22..33),
+ * and WvZz Modulation (34..42). Values are appended only, so saved sessions stay valid.
  */
 enum class ModTarget : int
 {
@@ -54,7 +56,21 @@ enum class ModTarget : int
     DynCompMix,
     DynPumpAmount,
     DynPumpCurve,
-    DynClipDrive
+    DynClipDrive,
+
+    // --- Modulation Profile Targets (WvZz Modulation). Flanger reuses FlangerRate / FlangerAmount. ---
+    ModChorRate,
+    ModChorDepth,
+    ModChorMix,
+    ModPhsRate,
+    ModPhsCenter,
+    ModPhsFeedback,
+    ModPhsMix,
+    ModTremRate,
+    ModTremDepth,
+
+    // Keep last: number of ModTarget values. New targets are appended above this line.
+    NumTargets
 };
 
 /**

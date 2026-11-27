@@ -76,8 +76,9 @@ ModulationView::ModulationView(juce::AudioProcessorValueTreeState& apvts,
     setupCenterTabBtn(xyTabButton);
     setupCenterTabBtn(monitorTabButton);
 
-    xyTabButton.onClick = [this] { setCenterTab(false); };
-    monitorTabButton.onClick = [this] { setCenterTab(true); };
+    xyTabButton.onClick = [this] { setCenterTab(CenterTab::XYPad); };
+    monitorTabButton.onClick = [this] { setCenterTab(CenterTab::Monitor); };
+    customTabButton.onClick = [this] { setCenterTab(CenterTab::Custom); };
 
     // X/Y Pad & Visualizer
     xyPad = std::make_unique<ui::XYPadComponent>(apvtsState, "xy_x", "xy_y", "X/Y PAD", "X Target", "Y Target", ui::WvZzLookAndFeel::skyCyan);
@@ -145,7 +146,7 @@ ModulationView::ModulationView(juce::AudioProcessorValueTreeState& apvts,
     initRotary(lfo2RateKnob, "lfo2_rate", "Rate", false, ui::WvZzLookAndFeel::warmAmber);
     initRotary(lfo2DepthKnob, "lfo2_depth", "Depth", true, ui::WvZzLookAndFeel::warmAmber);
 
-    setCenterTab(true);
+    setCenterTab(CenterTab::Monitor);
 }
 
 void ModulationView::initToggle(ToggleControl& tc, const juce::String& paramId, const juce::String& text,
@@ -197,33 +198,59 @@ void ModulationView::initCombo(ComboControl& cc, const juce::String& paramId, co
         apvtsState, paramId, cc.box);
 }
 
-void ModulationView::setCenterTab(bool showMonitor)
+void ModulationView::setCustomDisplay(const juce::String& tabTitle, std::unique_ptr<juce::Component> display)
 {
-    isMonitorActive = showMonitor;
+    if (display == nullptr)
+        return;
 
-    xyTabButton.setColour(juce::TextButton::buttonColourId,
-        !showMonitor ? ui::WvZzLookAndFeel::skyCyan.withAlpha(0.25f) : ui::WvZzLookAndFeel::cardBg.darker(0.2f));
-    xyTabButton.setColour(juce::TextButton::textColourOffId,
-        !showMonitor ? ui::WvZzLookAndFeel::skyCyan : ui::WvZzLookAndFeel::textSecondary);
+    customDisplayTitle = tabTitle;
+    customDisplay = std::move(display);
+    addChildComponent(*customDisplay);
 
-    monitorTabButton.setColour(juce::TextButton::buttonColourId,
-        showMonitor ? ui::WvZzLookAndFeel::skyCyan.withAlpha(0.25f) : ui::WvZzLookAndFeel::cardBg.darker(0.2f));
-    monitorTabButton.setColour(juce::TextButton::textColourOffId,
-        showMonitor ? ui::WvZzLookAndFeel::skyCyan : ui::WvZzLookAndFeel::textSecondary);
+    customTabButton.setButtonText(tabTitle);
+    addAndMakeVisible(customTabButton);
 
-    if (xyPad != nullptr) xyPad->setVisible(!showMonitor);
+    setCenterTab(activeTab);
+}
+
+void ModulationView::setCenterTab(CenterTab tab)
+{
+    if (tab == CenterTab::Custom && customDisplay == nullptr)
+        tab = CenterTab::Monitor;
+
+    activeTab = tab;
+    const bool showXY      = (tab == CenterTab::XYPad);
+    const bool showMonitor = (tab == CenterTab::Monitor);
+    const bool showCustom  = (tab == CenterTab::Custom);
+
+    auto styleTab = [](juce::TextButton& btn, bool active) {
+        btn.setColour(juce::TextButton::buttonColourId,
+            active ? ui::WvZzLookAndFeel::skyCyan.withAlpha(0.25f) : ui::WvZzLookAndFeel::cardBg.darker(0.2f));
+        btn.setColour(juce::TextButton::textColourOffId,
+            active ? ui::WvZzLookAndFeel::skyCyan : ui::WvZzLookAndFeel::textSecondary);
+    };
+    styleTab(xyTabButton, showXY);
+    styleTab(monitorTabButton, showMonitor);
+    styleTab(customTabButton, showCustom);
+
+    if (xyPad != nullptr) xyPad->setVisible(showXY);
     if (signalVisualizer != nullptr) signalVisualizer->setVisible(showMonitor);
+    if (customDisplay != nullptr) customDisplay->setVisible(showCustom);
 
-    xyXTargetBox.box.setVisible(!showMonitor);
-    xyXTargetBox.label.setVisible(!showMonitor);
-    xyYTargetBox.box.setVisible(!showMonitor);
-    xyYTargetBox.label.setVisible(!showMonitor);
-    xyXDepthKnob.slider.setVisible(!showMonitor);
-    xyXDepthKnob.label.setVisible(!showMonitor);
-    xyYDepthKnob.slider.setVisible(!showMonitor);
-    xyYDepthKnob.label.setVisible(!showMonitor);
+    xyXTargetBox.box.setVisible(showXY);
+    xyXTargetBox.label.setVisible(showXY);
+    xyYTargetBox.box.setVisible(showXY);
+    xyYTargetBox.label.setVisible(showXY);
+    xyXDepthKnob.slider.setVisible(showXY);
+    xyXDepthKnob.label.setVisible(showXY);
+    xyYDepthKnob.slider.setVisible(showXY);
+    xyYDepthKnob.label.setVisible(showXY);
 
-    card.setTitle(showMonitor ? "ANALYSIS & MONITOR" : "MODULATION & X/Y");
+    // With three tabs the header has less room, so the titles are short
+    if (customDisplay != nullptr)
+        card.setTitle(showCustom ? customDisplayTitle : (showMonitor ? "MONITOR" : "MOD & X/Y"));
+    else
+        card.setTitle(showMonitor ? "ANALYSIS & MONITOR" : "MODULATION & X/Y");
     card.setAccentColor(ui::WvZzLookAndFeel::skyCyan);
 
     resized();
@@ -237,6 +264,7 @@ void ModulationView::updateVisuals()
 {
     if (lfo1Scope != nullptr) lfo1Scope->repaint();
     if (lfo2Scope != nullptr) lfo2Scope->repaint();
+    if (customDisplay != nullptr && customDisplay->isVisible()) customDisplay->repaint();
 }
 
 void ModulationView::resized()
@@ -245,10 +273,23 @@ void ModulationView::resized()
     if (helpButton != nullptr)
         helpButton->setBounds(card.getHeaderHelpBounds());
 
-    auto tabArea = juce::Rectangle<int>(getWidth() - 170, 5, 140, 18);
-    xyTabButton.setBounds(tabArea.removeFromLeft(68));
-    tabArea.removeFromLeft(4);
-    monitorTabButton.setBounds(tabArea.removeFromLeft(68));
+    if (customDisplay != nullptr)
+    {
+        // Three tabs: X/Y PAD | MONITOR | <custom>
+        auto tabArea = juce::Rectangle<int>(getWidth() - 258, 5, 228, 18);
+        xyTabButton.setBounds(tabArea.removeFromLeft(62));
+        tabArea.removeFromLeft(4);
+        monitorTabButton.setBounds(tabArea.removeFromLeft(66));
+        tabArea.removeFromLeft(4);
+        customTabButton.setBounds(tabArea);
+    }
+    else
+    {
+        auto tabArea = juce::Rectangle<int>(getWidth() - 170, 5, 140, 18);
+        xyTabButton.setBounds(tabArea.removeFromLeft(68));
+        tabArea.removeFromLeft(4);
+        monitorTabButton.setBounds(tabArea.removeFromLeft(68));
+    }
 
     auto content = card.getContentBounds();
 
@@ -263,6 +304,8 @@ void ModulationView::resized()
     auto xyArea = content.removeFromTop(270);
     if (signalVisualizer != nullptr)
         signalVisualizer->setBounds(xyArea);
+    if (customDisplay != nullptr)
+        customDisplay->setBounds(xyArea);
     if (xyPad != nullptr)
         xyPad->setBounds(xyArea.removeFromTop(175));
 

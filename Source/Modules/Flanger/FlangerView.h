@@ -14,7 +14,8 @@ class FlangerView : public ui::IModuleView
 public:
     FlangerView(juce::AudioProcessorValueTreeState& apvts,
                 const juce::String& prefix,
-                ui::IHelpOverlayHost* helpHost);
+                ui::IHelpOverlayHost* helpHost,
+                bool extendedControls = false);
     ~FlangerView() override = default;
 
     void resized() override;
@@ -47,6 +48,13 @@ private:
 
     RotaryControl rateKnob;
     RotaryControl amountKnob;
+
+    // Shown only with extendedControls (WvZz Modulation). WvZz Distortion keeps the 2-knob card.
+    bool extended { false };
+    RotaryControl feedbackKnob;
+    RotaryControl depthKnob;
+    RotaryControl centerKnob;
+    ToggleControl tzeroToggle;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FlangerView)
 };

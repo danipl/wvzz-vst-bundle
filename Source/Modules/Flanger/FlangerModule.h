@@ -9,8 +9,10 @@ namespace wvzz::modules {
 class FlangerModule : public IPluginModule
 {
 public:
-    explicit FlangerModule(juce::String prefix = "flg")
+    /** @param extendedControls true shows Feedback, Depth, Center, and Through-Zero in the view. */
+    explicit FlangerModule(juce::String prefix = "flg", bool extendedControls = false)
         : instancePrefix(std::move(prefix)),
+          extendedView(extendedControls),
           dsp(instancePrefix)
     {
     }
@@ -31,11 +33,12 @@ public:
         juce::AudioProcessorValueTreeState& apvts,
         ui::IHelpOverlayHost* helpHost = nullptr) override
     {
-        return std::make_unique<FlangerView>(apvts, instancePrefix, helpHost);
+        return std::make_unique<FlangerView>(apvts, instancePrefix, helpHost, extendedView);
     }
 
 private:
     juce::String instancePrefix;
+    bool extendedView { false };
     FlangerDSP dsp;
 };
 

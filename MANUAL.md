@@ -49,6 +49,7 @@ A root [`Makefile`](Makefile) provides simple commands:
 | `make standalone` | Builds the Standalone app of every plugin into `build/<Target>_artefacts/Release/Standalone/` |
 | `make distortion-vst3` / `make distortion-standalone` | Builds only WvZz Distortion |
 | `make dynamics-vst3` / `make dynamics-standalone` | Builds only WvZz Dynamics |
+| `make modulation-vst3` / `make modulation-standalone` | Builds only WvZz Modulation |
 | `make install` (or `make install-vst3`) | Builds, copies, and ad-hoc signs every `.vst3` bundle in `~/Library/Audio/Plug-Ins/VST3/` |
 | `make install-system` | Copies and signs every `.vst3` bundle in `/Library/Audio/Plug-Ins/VST3/` (requires `sudo`) |
 | `make test` | Runs the zero-allocation DSP quantitative tests (`wvzz_dsp_tests`) |

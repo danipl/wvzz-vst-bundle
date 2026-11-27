@@ -65,6 +65,15 @@ See proposal.md - Why. The model for a plugin is `Plugins/WvZzDynamics/`; the mo
 - [Through-zero adds `flg_center` of delay to the dry path] → Only when the switch is on; documented in the manual. No latency is reported, because the effect is off by default and the delay changes with a knob.
 - [UI cannot be tested automatically] → Editor construction test at 1080 x 680; the scope and controls are checked by hand in the Standalone app (see tasks, last group).
 
+## Implementation Notes
+
+- The three new Flanger float parameters use ranges without a step. A `0.01` step made the host store `2.5 ms` as a neighbouring float, which changed the default output by `8e-5`. Without a step the equivalence test measures `1.8e-7`. The values are displayed with 2 decimals.
+- All 28 test suites also pass in an AddressSanitizer build (no memory error reported).
+
 ## Open Questions
 
-- None that change the specs or the tasks.
+Found during this work. They are outside this ticket and do not change the plan:
+
+- The Standalone apps can crash at launch inside JUCE 8.0.4 (`juce_CoreAudio_mac.cpp:795`, heap buffer overflow in the audio device callback, reported by AddressSanitizer). WvZz Dynamics is affected too, so it is not caused by this change. A second launch usually works.
+- `assert()` is compiled out in the Release test build, so the older suites do not fail on a wrong result. In a Debug build `testBandRejectRecombination` fails at `Tests/DSPTests.cpp:314`. The new suites use explicit checks.
+- `flg_amount` defaults to `0.0` (kept for WvZz Distortion), so turning the Flanger on by hand in WvZz Modulation is silent until Amount is raised. The presets set it.

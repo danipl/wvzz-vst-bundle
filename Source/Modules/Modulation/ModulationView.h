@@ -8,6 +8,7 @@
 #include "../../Core/UI/WvZzLookAndFeel.h"
 #include "../../Core/UI/IHelpSystem.h"
 #include "ModulationDSP.h"
+#include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -22,6 +23,14 @@ public:
                    ui::IHelpOverlayHost* helpHost,
                    ModProfile profile = ModProfile::Distortion);
     ~ModulationView() override = default;
+
+    using CustomDisplayFactory = std::function<std::unique_ptr<juce::Component>()>;
+
+    /**
+     * @brief Adds a plugin-specific display as a third center tab (after X/Y PAD and MONITOR).
+     * Without this call the view keeps its two-tab layout.
+     */
+    void setCustomDisplay(const juce::String& tabTitle, std::unique_ptr<juce::Component> display);
 
     void resized() override;
     void paint(juce::Graphics& g) override;
@@ -76,7 +85,8 @@ private:
     void initToggle(ToggleControl& tc, const juce::String& paramId, const juce::String& text,
                     bool isPill = true, juce::Colour accent = ui::WvZzLookAndFeel::neonGreen);
 
-    void setCenterTab(bool showMonitor);
+    enum class CenterTab { XYPad, Monitor, Custom };
+    void setCenterTab(CenterTab tab);
 
     juce::AudioProcessorValueTreeState& apvtsState;
     ModulationDSP& modDSP;
@@ -88,7 +98,10 @@ private:
     // Center Tab Bar in header
     juce::TextButton xyTabButton { "X/Y PAD" };
     juce::TextButton monitorTabButton { "MONITOR" };
-    bool isMonitorActive { true };
+    juce::TextButton customTabButton;
+    CenterTab activeTab { CenterTab::Monitor };
+    juce::String customDisplayTitle;
+    std::unique_ptr<juce::Component> customDisplay;
 
     // Upper views
     std::unique_ptr<ui::XYPadComponent> xyPad;

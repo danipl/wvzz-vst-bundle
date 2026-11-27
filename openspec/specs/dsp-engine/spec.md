@@ -47,11 +47,23 @@ The system SHALL provide a multi-mode filter (`MM Filter`) after the Distortion 
 - **THEN** the MM Filter processes audio using the selected SVF, Ladder, Comb, RingMod, or Formant vowel topology blended by `mm_mix`
 
 ### Requirement: Stereo Modulated Flanger
-The system SHALL apply a stereo modulated short delay line flanger after the Band-Reject summing node using 3rd-order Lagrange or Hermite fractional interpolation, a `90°` quadrature LFO phase offset between Left and Right channels, center delay time of `2.5 ms`, sweep depth of `±2.0 ms`, fixed internal feedback of `0.55`, sweep speed `flg_rate` (`0.01`–`20.0 Hz`, default `0.4 Hz`), wet/dry mix `flg_amount` (`0.0`–`1.0`), and `flg_bypass` defaulting to `1`.
+The system SHALL apply a stereo flanger: a short delay line with 3rd-order fractional interpolation and a `90°` left/right LFO offset. Parameters: `flg_center` (`0.5–10 ms`, default `2.5`), `flg_depth` (`0–5 ms`, default `2.0`), `flg_feedback` (`-0.95 to 0.95`, default `0.55`), `flg_tzero` (default off), `flg_rate` (`0.01–20 Hz`, default `0.4`), `flg_amount` (`0–1`), and `flg_bypass` (default `1`). In WvZz Distortion it runs after the Band-Reject summing node.
 
 #### Scenario: Stereo flanger modulation
 - **WHEN** `flg_bypass` is `0` and `flg_amount` is increased above `0.0`
-- **THEN** the 3rd-order interpolated delay sweeps `2.5 ms ± 2.0 ms` in stereo quadrature with `0.55` feedback
+- **THEN** the 3rd-order interpolated delay sweeps `flg_center ± flg_depth` in stereo quadrature with `flg_feedback` feedback
+
+#### Scenario: Default values keep the previous sound
+- **WHEN** `flg_feedback`, `flg_depth`, `flg_center`, and `flg_tzero` are at their defaults
+- **THEN** the output equals the output of the flanger with fixed `2.5 ms` center, `±2.0 ms` depth, and `0.55` feedback
+
+#### Scenario: Through-zero mode
+- **WHEN** `flg_tzero` is on
+- **THEN** the dry path is delayed by `flg_center`, so the wet signal sweeps before and after the dry signal and the comb notches pass through zero delay
+
+#### Scenario: Negative feedback
+- **WHEN** `flg_feedback` is negative
+- **THEN** the feedback signal is inverted and the output stays finite
 
 ### Requirement: Band-Reject Summer Node
 The system SHALL delay the auxiliary rejected band signal (`Low_Rejected + High_Rejected`) by the active Distortion oversampling latency and sum it with the output of Module 3 (`MM Filter`) scaled by `bp_br_mix` **before** feeding Module 4 (`Flanger`), following `Signal = MM_Filter_Out + (Delayed(Low_Rejected + High_Rejected) * bp_br_mix)`.

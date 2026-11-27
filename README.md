@@ -77,6 +77,20 @@ All plugins in the WvZz suite are built as native **macOS Universal Binaries** (
 
 <br/>
 
+### 3. 🌊 WvZz Modulation *(Available Now)*
+
+> **Chorus, Phaser, Flanger & Tremolo in One Serial Chain**  
+> Four modulation effects in a fixed order, each with its own bypass. Two tempo-synced LFOs and an X/Y pad move 14 targets.
+
+| Key Capabilities | Highlights | Documentation |
+| :--- | :--- | :--- |
+| **Multi-Voice Chorus** | 1 to 4 modulated delay voices with stereo spread and feedback. | 📖 **[Plugin Overview & DSP Guide](Plugins/WvZzModulation/README.md)** |
+| **All-Pass Phaser** | 2 to 12 all-pass stages swept up to ±2 octaves, with positive or negative feedback. | 🎛️ **[Producer User Manual](Plugins/WvZzModulation/USER_MANUAL.md)** |
+| **Through-Zero Flanger** | Adjustable feedback, depth, and center delay. Through-zero mode sweeps the wet signal past the dry signal. | 🧪 **[10 Factory Presets Included](Plugins/WvZzModulation/USER_MANUAL.md)** |
+| **Classic & Harmonic Tremolo** | Level tremolo, auto-pan, or a harmonic mode that moves lows and highs in opposite phase. The **SCOPE** tab shows all four effect LFOs live. | 🛠️ **[Source Code (`Plugins/WvZzModulation`)](Plugins/WvZzModulation)** |
+
+<br/>
+
 ### 🗺️ Bundle Roadmap & Upcoming Plugins
 
 Because every DSP block lives in our shared `WvZzModules` library, the bundle is actively expanding into a complete production suite:
@@ -85,9 +99,9 @@ Because every DSP block lives in our shared `WvZzModules` library, the bundle is
 | :--- | :---: | :--- | :--- |
 | **🔥 WvZz Distortion** | ✅ **Released** | Multi-circuit saturation, ZDF band-splitting, 12-mode filtering & Phat compression | `BPFilter` + `Distortion` + `MMFilter` + `Flanger` + `MagicEQ` + `Compressor` |
 | **🎚️ WvZz Dynamics** | ✅ **Released** | Sub lock, transient shaper & gate, 3-band OTT, bus compressor, tempo-synced pumper & maximizer clipper | `DynDetector` + `TransientShaper` + `MultibandOTT` + `Compressor` + `RhythmicPumper` + `MaximizerClipper` |
+| **🌊 WvZz Modulation** | ✅ **Released** | Multi-voice chorus, all-pass phaser, through-zero flanger & harmonic tremolo in a serial chain | `Chorus` + `Phaser` + `Flanger` + `Tremolo`, LFO phase scope |
 | **⏱️ WvZz Delay** | 🚧 *Planned* | Tape, analog BBD & granular stereo delay with ducking and filter diffusion | Fractional Lagrange delay lines, ZDF feedback filters, LFO/Env matrix |
 | **🌌 WvZz Reverb** | 🚧 *Planned* | Algorithmic plate, lush hall & non-linear shimmer spaces | Zero-allocation Feedback Delay Networks (FDN) & early reflection diffusers |
-| **🌊 WvZz Modulation** | 🚧 *Planned* | Dimensional multi-voice chorus, through-zero phaser, flanger & harmonic tremolo | Multi-phase quadrature oscillators & all-pass ZDF phaser cascades |
 
 ---
 
@@ -126,6 +140,9 @@ At the heart of the repository is `libWvZzModules.a` (`Source/Modules/`), a self
 6. **[`Compressor`](Source/Modules/Compressor/)**: Program-dependent dynamic leveler with automatic makeup gain, Normal (`3.5:1`) and Phat (`12:1`) ballistics, and atomic gain-reduction metering.
 7. **[`Modulation`](Source/Modules/Modulation/)**: Dual 7-waveform LFOs (Free Hz or Host BPM Sync) + interactive X/Y Vector Pad + musical `Dice` smart parameter randomizer.
 8. **[`Master`](Source/Modules/Master/)**: Input trim, 24-sample circular delay dry-path latency compensation, dry/wet blender, output gain, safety `-0.1 dBFS` hard clipper, and 60 FPS Peak/RMS stereo VU telemetry.
+9. **[`Chorus`](Source/Modules/Chorus/)**: 1 to 4 modulated delay voices on one delay line per channel, with stereo spread and soft-limited feedback.
+10. **[`Phaser`](Source/Modules/Phaser/)**: Cascade of 2 to 12 first-order all-pass sections swept by an LFO, with bipolar feedback and stereo LFO offset.
+11. **[`Tremolo`](Source/Modules/Tremolo/)**: Classic level tremolo and a harmonic mode that modulates the bands below and above a crossover in opposite phase.
 
 ---
 
