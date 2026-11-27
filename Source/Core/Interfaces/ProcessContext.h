@@ -11,12 +11,13 @@ enum class ModProfile : int
 {
     Distortion = 0,
     Dynamics,
-    Modulation
+    Modulation,
+    Delay
 };
 
 /**
  * @brief Modulatable Targets Enum across WvZz Distortion (0..21), WvZz Dynamics (22..33),
- * and WvZz Modulation (34..42). Values are appended only, so saved sessions stay valid.
+ * WvZz Modulation (34..42), and WvZz Delay (43..52). Values are appended only, so saved sessions stay valid.
  */
 enum class ModTarget : int
 {
@@ -68,6 +69,18 @@ enum class ModTarget : int
     ModPhsMix,
     ModTremRate,
     ModTremDepth,
+
+    // --- Delay Profile Targets (WvZz Delay) ---
+    DlyTime,
+    DlyFeedback,
+    DlyLp,
+    DlyHp,
+    DlyDiffusion,
+    DlyWow,
+    DlyMix,
+    GrainSize,
+    GrainPitch,
+    GrainSpray,
 
     // Keep last: number of ModTarget values. New targets are appended above this line.
     NumTargets

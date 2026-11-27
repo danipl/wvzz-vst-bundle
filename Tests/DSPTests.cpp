@@ -5,6 +5,11 @@
 #include "Plugins/WvZzDynamics/Presets/FactoryPresets.h"
 #include "Plugins/WvZzModulation/PluginProcessor.h"
 #include "Plugins/WvZzModulation/PluginEditor.h"
+#include "Plugins/WvZzDelay/PluginProcessor.h"
+#include "Plugins/WvZzDelay/PluginEditor.h"
+#include "Modules/Delay/DelayModule.h"
+#include "Modules/Grain/GrainModule.h"
+#include "Core/UI/DelayTapDisplayComponent.h"
 #include "Modules/Chorus/ChorusModule.h"
 #include "Modules/Phaser/PhaserModule.h"
 #include "Modules/Tremolo/TremoloModule.h"
@@ -2081,6 +2086,815 @@ static void testWvZzModulationEditorAndScope()
     std::cout << "  -> PASS\n" << std::endl;
 }
 
+// ==============================================================================
+// WvZz Delay suites (GH-16)
+// ==============================================================================
+
+/** Delay + Grain as one module, wired like the plugin does it (Granular mode needs both). */
+class DelayGrainPair : public wvzz::IDSPModule
+{
+public:
+    DelayGrainPair() : delay("dly"), grain("grain")
+    {
+        grain.setExternalHost(true);
+        delay.setGrainSource(&grain);
+    }
+
+    void registerParameters(juce::AudioProcessorValueTreeState::ParameterLayout& layout) override
+    {
+        delay.registerParameters(layout);
+        grain.registerParameters(layout);
+    }
+    void bindParameters(juce::AudioProcessorValueTreeState& apvts) override { delay.bindParameters(apvts); grain.bindParameters(apvts); }
+    void prepare(const juce::dsp::ProcessSpec& spec) override { grain.prepare(spec); delay.prepare(spec); }
+    void reset() noexcept override { delay.reset(); grain.reset(); }
+    void process(wvzz::ProcessContext& ctx) noexcept override { delay.process(ctx); }
+    void randomize(juce::Random&) override {}
+
+    wvzz::modules::DelayDSP delay;
+    wvzz::modules::GrainDSP grain;
+};
+
+/** Runs a mono-compatible signal through a hosted module in blocks and returns the left (and right) output. */
+static void renderThroughHost(ModuleTestHost& host, const std::vector<float>& input, std::vector<float>& outLeft,
+                              std::vector<float>* outRight = nullptr, int blockSize = 512)
+{
+    juce::AudioBuffer<float> buffer(2, blockSize);
+    outLeft.assign(input.size(), 0.0f);
+    if (outRight != nullptr)
+        outRight->assign(input.size(), 0.0f);
+
+    for (size_t pos = 0; pos + static_cast<size_t>(blockSize) <= input.size(); pos += static_cast<size_t>(blockSize))
+    {
+        for (int i = 0; i < blockSize; ++i)
+        {
+            buffer.setSample(0, i, input[pos + static_cast<size_t>(i)]);
+            buffer.setSample(1, i, input[pos + static_cast<size_t>(i)]);
+        }
+        host.run(buffer);
+        for (int i = 0; i < blockSize; ++i)
+        {
+            outLeft[pos + static_cast<size_t>(i)] = buffer.getSample(0, i);
+            if (outRight != nullptr)
+                (*outRight)[pos + static_cast<size_t>(i)] = buffer.getSample(1, i);
+        }
+    }
+}
+
+/** Frequency of a tone from its zero crossings (crossing times are linearly interpolated). */
+static float estimateFrequency(const std::vector<float>& x, size_t start, size_t length, double sampleRate)
+{
+    double first = -1.0, last = -1.0;
+    int crossings = 0;
+    for (size_t n = start + 1; n < start + length && n < x.size(); ++n)
+    {
+        if (x[n - 1] <= 0.0f && x[n] > 0.0f) // rising crossings only
+        {
+            const double t = static_cast<double>(n - 1) + static_cast<double>(-x[n - 1]) / static_cast<double>(x[n] - x[n - 1]);
+            if (first < 0.0) first = t;
+            last = t;
+            ++crossings;
+        }
+    }
+    if (crossings < 2)
+        return 0.0f;
+    return static_cast<float>(static_cast<double>(crossings - 1) * sampleRate / (last - first));
+}
+
+static float rmsOf(const std::vector<float>& x, size_t start, size_t length)
+{
+    double sum = 0.0;
+    size_t count = 0;
+    for (size_t n = start; n < start + length && n < x.size(); ++n, ++count)
+        sum += static_cast<double>(x[n]) * static_cast<double>(x[n]);
+    return count > 0 ? static_cast<float>(std::sqrt(sum / static_cast<double>(count))) : 0.0f;
+}
+
+/** Share of high-frequency content: energy of the first difference divided by the energy. */
+static float brightness(const std::vector<float>& x, size_t start, size_t length)
+{
+    double diff = 0.0, energy = 0.0;
+    for (size_t n = start + 1; n < start + length && n < x.size(); ++n)
+    {
+        diff += static_cast<double>(x[n] - x[n - 1]) * static_cast<double>(x[n] - x[n - 1]);
+        energy += static_cast<double>(x[n]) * static_cast<double>(x[n]);
+    }
+    return static_cast<float>(diff / std::max(1e-20, energy));
+}
+
+static size_t indexOfPeak(const std::vector<float>& x, size_t start = 0)
+{
+    size_t best = start;
+    for (size_t n = start; n < x.size(); ++n)
+        if (std::abs(x[n]) > std::abs(x[best]))
+            best = n;
+    return best;
+}
+
+static std::vector<float> makeSine(size_t length, double sampleRate, float hz, float amplitude)
+{
+    std::vector<float> x(length);
+    for (size_t n = 0; n < length; ++n)
+        x[n] = amplitude * static_cast<float>(std::sin(juce::MathConstants<double>::twoPi * hz * static_cast<double>(n) / sampleRate));
+    return x;
+}
+
+static void testDelayLineAndGrain()
+{
+    std::cout << "[Delay 1/6] DelayLine read convention; Grain pitch shift, 32-voice limit, zero allocation, prefix..." << std::endl;
+
+    // --- DelayLine: read(d) before push(x[n]) returns x[n - d] ---
+    {
+        wvzz::dsp::DelayLine line;
+        line.prepare(1000);
+        float worstInt = 0.0f, worstFrac = 0.0f;
+        for (int n = 0; n < 5000; ++n)
+        {
+            const float x = static_cast<float>(n); // a ramp: x[n] = n
+            if (n > 1100)
+            {
+                worstInt  = std::max(worstInt,  std::abs(line.read(10.0f) - static_cast<float>(n - 10)));
+                worstInt  = std::max(worstInt,  std::abs(line.read(1000.0f) - static_cast<float>(n - 1000)));
+                worstInt  = std::max(worstInt,  std::abs(line.readInteger(37) - static_cast<float>(n - 37)));
+                worstFrac = std::max(worstFrac, std::abs(line.read(10.5f) - (static_cast<float>(n) - 10.5f)));
+            }
+            line.push(x);
+        }
+        check(worstInt < 1.0e-3f, "DelayLine::read(d) must return the sample pushed d samples before");
+        check(worstFrac < 1.0e-2f, "DelayLine fractional read must interpolate between samples");
+    }
+
+    const double sampleRate = 48000.0;
+
+    // --- Scenario: Pitch shift up one octave (stand-alone Grain module) ---
+    {
+        wvzz::modules::GrainDSP grain("grain");
+        ModuleTestHost host(grain);
+        host.set("grain_pitch", 12.0f);
+        host.set("grain_spray", 0.0f);
+        host.set("grain_reverse", 0.0f);
+        host.set("grain_size", 60.0f);
+        host.set("grain_density", 40.0f);
+        host.prepare(sampleRate, 512);
+
+        std::vector<float> out;
+        renderThroughHost(host, makeSine(48000 * 2, sampleRate, 220.0f, 0.5f), out);
+        const float freq = estimateFrequency(out, 48000, 40000, sampleRate);
+        std::cout << "  -> 220 Hz tone, grain pitch +12: measured " << freq << " Hz" << std::endl;
+        check(freq > 400.0f && freq < 480.0f, "grain pitch +12 must move a 220 Hz tone to about 440 Hz");
+    }
+
+    // --- Scenario: Voice count is limited to 32 ---
+    {
+        wvzz::modules::GrainDSP grain("grain");
+        ModuleTestHost host(grain);
+        host.set("grain_size", 500.0f);
+        host.set("grain_density", 60.0f); // asks for about 30 overlapping grains, jitter pushes it past 32
+        host.set("grain_reverse", 0.5f);
+        host.set("grain_pitch", -12.0f);
+        host.prepare(sampleRate, 512);
+
+        juce::AudioBuffer<float> buffer(2, 512);
+        juce::Random rng(21);
+        int maxVoicesSeen = 0;
+        for (int b = 0; b < 400; ++b)
+        {
+            fillNoise(buffer, rng, 1.0f);
+            host.run(buffer);
+            maxVoicesSeen = std::max(maxVoicesSeen, grain.getNumActiveVoices());
+            check(allFinite(buffer, 64.0f), "grain output must stay finite with all voices busy");
+        }
+        std::cout << "  -> most voices active at once: " << maxVoicesSeen << std::endl;
+        check(maxVoicesSeen <= 32 && maxVoicesSeen >= 20, "the grain engine must use many voices but never more than 32");
+    }
+
+    // --- Zero allocation and prefixing ---
+    {
+        wvzz::modules::GrainDSP grain("slot2_grain");
+        ModuleTestHost host(grain);
+        check(host.getAPVTS().getParameter("slot2_grain_size") != nullptr && host.getAPVTS().getParameter("grain_size") == nullptr,
+              "grain parameter ids must use the instance prefix");
+        host.set("slot2_grain_pitch", 7.0f);
+        host.set("slot2_grain_reverse", 0.5f);
+        host.prepare(sampleRate, 512);
+        juce::AudioBuffer<float> buffer(2, 512);
+        generateSineWave(buffer, sampleRate, 440.0f);
+        host.run(buffer);
+        g_allocationCount = 0;
+        g_trackingAllocations = true;
+        for (int b = 0; b < 1000; ++b)
+        {
+            generateSineWave(buffer, sampleRate, 440.0f);
+            host.run(buffer);
+        }
+        g_trackingAllocations = false;
+        std::cout << "  -> heap allocations in 1,000 blocks: " << g_allocationCount << std::endl;
+        check(g_allocationCount == 0, "grain must not allocate while processing");
+    }
+
+    std::cout << "  -> PASS\n" << std::endl;
+}
+
+static void testDelayTimingAndRouting()
+{
+    std::cout << "[Delay 2/6] Delay: impulse timing, tempo sync, 4 s maximum, ping-pong, diffusion..." << std::endl;
+    const double sampleRate = 48000.0;
+
+    auto impulseResponse = [&](std::function<void(ModuleTestHost&)> configure, size_t length,
+                               std::vector<float>& left, std::vector<float>& right) {
+        wvzz::modules::DelayDSP delay("dly");
+        ModuleTestHost host(delay);
+        host.set("dly_mode", 0.0f);
+        host.set("dly_feedback", 0.0f);
+        host.set("dly_mix", 1.0f);
+        host.set("dly_lp", 20000.0f);
+        configure(host);
+        host.prepare(sampleRate, 512);
+        std::vector<float> input(length, 0.0f);
+        input[0] = 1.0f;
+        renderThroughHost(host, input, left, &right);
+    };
+
+    std::vector<float> l, r;
+
+    // --- Scenario: Impulse arrives after the set time (100 ms = 4800 samples, within 1 sample) ---
+    impulseResponse([](ModuleTestHost& h) { h.set("dly_time", 100.0f); }, 512 * 20, l, r);
+    const long peak100 = static_cast<long>(indexOfPeak(l));
+    std::cout << "  -> 100 ms: wet impulse at sample " << peak100 << " (expected 4800)" << std::endl;
+    check(std::labs(peak100 - 4800) <= 1, "Clean delay of 100 ms must return the impulse after 4800 samples");
+    check(std::labs(static_cast<long>(indexOfPeak(r)) - 4800) <= 1, "the right channel must have the same delay with offset 0");
+
+    // --- Scenario: Tempo-synced time (1/4 at 120 BPM = 500 ms = 24000 samples) ---
+    impulseResponse([](ModuleTestHost& h) { h.set("dly_sync", 1.0f); h.set("dly_sync_div", 5.0f); }, 512 * 60, l, r);
+    const long peakSync = static_cast<long>(indexOfPeak(l));
+    std::cout << "  -> sync 1/4 at 120 BPM: wet impulse at sample " << peakSync << " (expected 24000)" << std::endl;
+    check(std::labs(peakSync - 24000) <= 1, "1/4 note at 120 BPM must be 500 ms");
+    check(std::abs(wvzz::modules::DelayDSP::beatsForSyncDiv(7) - 0.75) < 1e-9 && std::abs(wvzz::modules::DelayDSP::beatsForSyncDiv(0) - 4.0) < 1e-9,
+          "dotted eighth must be 0.75 beats and 1/1 must be 4 beats");
+
+    // --- Scenario: Maximum time (4000 ms = 192000 samples) ---
+    impulseResponse([](ModuleTestHost& h) { h.set("dly_time", 4000.0f); }, 512 * 400, l, r);
+    const long peakMax = static_cast<long>(indexOfPeak(l));
+    std::cout << "  -> 4000 ms: wet impulse at sample " << peakMax << " (expected 192000)" << std::endl;
+    check(std::labs(peakMax - 192000) <= 1, "4 second delay must return the impulse after 192000 samples");
+
+    // --- Right offset adds to the right channel only ---
+    impulseResponse([](ModuleTestHost& h) { h.set("dly_time", 100.0f); h.set("dly_offset", 10.0f); }, 512 * 20, l, r);
+    check(std::labs(static_cast<long>(indexOfPeak(l)) - 4800) <= 1 && std::labs(static_cast<long>(indexOfPeak(r)) - 5280) <= 1,
+          "dly_offset of 10 ms must delay the right channel by 480 more samples");
+
+    // --- Scenario: Ping-pong alternates sides ---
+    impulseResponse([](ModuleTestHost& h) { h.set("dly_time", 100.0f); h.set("dly_routing", 1.0f); h.set("dly_feedback", 0.6f); }, 512 * 40, l, r);
+    auto peakNear = [](const std::vector<float>& x, size_t centre) {
+        float best = 0.0f;
+        for (size_t n = centre - 20; n <= centre + 20; ++n)
+            best = std::max(best, std::abs(x[n]));
+        return best;
+    };
+    std::cout << "  -> ping-pong repeats (L/R): 1st " << peakNear(l, 4800) << "/" << peakNear(r, 4800)
+              << ", 2nd " << peakNear(l, 9600) << "/" << peakNear(r, 9600)
+              << ", 3rd " << peakNear(l, 14400) << "/" << peakNear(r, 14400) << std::endl;
+    check(peakNear(l, 4800) > 0.3f && peakNear(r, 4800) < 1.0e-4f, "ping-pong: the first repeat must be on the left only");
+    check(peakNear(r, 9600) > 0.1f && peakNear(l, 9600) < 1.0e-4f, "ping-pong: the second repeat must be on the right only");
+    check(peakNear(l, 14400) > 0.05f && peakNear(r, 14400) < 1.0e-4f, "ping-pong: the third repeat must be on the left again");
+
+    // --- Scenario: Diffusion spreads an impulse; at 0 it stays a single impulse ---
+    auto countAbove = [](const std::vector<float>& x, float threshold) {
+        int count = 0;
+        for (float v : x)
+            if (std::abs(v) > threshold)
+                ++count;
+        return count;
+    };
+    impulseResponse([](ModuleTestHost& h) { h.set("dly_time", 100.0f); h.set("dly_diffusion", 0.0f); }, 512 * 20, l, r);
+    const int sharp = countAbove(l, 0.01f);
+    impulseResponse([](ModuleTestHost& h) { h.set("dly_time", 100.0f); h.set("dly_diffusion", 1.0f); }, 512 * 20, l, r);
+    const int smeared = countAbove(l, 0.01f);
+    std::cout << "  -> samples above 0.01 in the first repeat: diffusion 0 -> " << sharp << ", diffusion 1 -> " << smeared << std::endl;
+    check(sharp <= 4, "with diffusion 0 the repeat must stay a single impulse");
+    check(smeared >= 6 && smeared > sharp * 2, "with diffusion 1 the repeat must spread over many samples");
+
+    std::cout << "  -> PASS\n" << std::endl;
+}
+
+static void testDelayFeedbackAndModes()
+{
+    std::cout << "[Delay 3/6] Delay: bounded at 110% feedback (30 s per mode), low-pass, BBD tone, tape wow..." << std::endl;
+    const double sampleRate = 48000.0;
+    const int blockSize = 512;
+
+    // --- Scenario: Output stays bounded above 100% feedback, 30 seconds, every mode ---
+    for (int mode = 0; mode < 4; ++mode)
+    {
+        DelayGrainPair pair;
+        ModuleTestHost host(pair);
+        host.set("dly_mode", static_cast<float>(mode));
+        host.set("dly_feedback", 1.1f);
+        host.set("dly_time", 120.0f);
+        host.set("dly_mix", 1.0f);
+        host.set("dly_drive", 1.0f);
+        host.set("dly_diffusion", 0.5f);
+        host.set("grain_pitch", 12.0f);
+        host.prepare(sampleRate, blockSize);
+
+        juce::AudioBuffer<float> buffer(2, blockSize);
+        juce::Random rng(77);
+        float peak = 0.0f;
+        const int blocks = static_cast<int>(30.0 * sampleRate / blockSize);
+        for (int b = 0; b < blocks; ++b)
+        {
+            fillNoise(buffer, rng, 1.0f);
+            host.run(buffer);
+            if (!allFinite(buffer, 8.0f))
+            {
+                std::cerr << "FAIL: mode " << mode << " left the bounds at 110% feedback (block " << b << ")" << std::endl;
+                std::exit(1);
+            }
+            peak = std::max(peak, buffer.getMagnitude(0, blockSize));
+        }
+        std::cout << "  -> mode " << wvzz::modules::getDelayModeNames()[mode] << ": peak after 30 s at 110% feedback = " << peak << std::endl;
+    }
+
+    // Noise burst (50 ms) followed by silence, to look at single repeats
+    auto burstInput = [&](size_t length) {
+        std::vector<float> x(length, 0.0f);
+        juce::Random rng(5);
+        for (size_t n = 0; n < 2400; ++n)
+            x[n] = (rng.nextFloat() * 2.0f - 1.0f) * 0.5f;
+        return x;
+    };
+
+    // --- Scenario: Low-pass darkens later repeats ---
+    {
+        wvzz::modules::DelayDSP delay("dly");
+        ModuleTestHost host(delay);
+        host.set("dly_time", 200.0f);
+        host.set("dly_feedback", 0.9f);
+        host.set("dly_lp", 1000.0f);
+        host.set("dly_mix", 1.0f);
+        host.prepare(sampleRate, blockSize);
+        std::vector<float> out;
+        renderThroughHost(host, burstInput(512 * 80), out);
+        const float first = brightness(out, 9600, 2400);
+        const float third = brightness(out, 28800, 2400);
+        std::cout << "  -> low-pass 1 kHz: brightness of repeat 1 = " << first << ", repeat 3 = " << third << std::endl;
+        check(third < first * 0.7f, "with a 1 kHz low-pass the third repeat must be darker than the first");
+    }
+
+    // --- Scenario: BBD is darker than Clean ---
+    {
+        float bright[2] = { 0.0f, 0.0f };
+        for (int pass = 0; pass < 2; ++pass)
+        {
+            wvzz::modules::DelayDSP delay("dly");
+            ModuleTestHost host(delay);
+            host.set("dly_mode", pass == 0 ? 0.0f : 2.0f);
+            host.set("dly_time", 200.0f);
+            host.set("dly_feedback", 0.0f);
+            host.set("dly_wow", 0.0f);
+            host.set("dly_mix", 1.0f);
+            host.prepare(sampleRate, blockSize);
+            std::vector<float> out;
+            renderThroughHost(host, burstInput(512 * 40), out);
+            bright[pass] = brightness(out, 9600, 2400);
+        }
+        std::cout << "  -> brightness of the first repeat: Clean " << bright[0] << ", BBD " << bright[1] << std::endl;
+        check(bright[1] < bright[0] * 0.5f, "BBD repeats must be darker than Clean repeats");
+    }
+
+    // --- Scenario: Tape wow modulates the time ---
+    {
+        float spread[2] = { 0.0f, 0.0f };
+        for (int pass = 0; pass < 2; ++pass)
+        {
+            wvzz::modules::DelayDSP delay("dly");
+            ModuleTestHost host(delay);
+            host.set("dly_mode", 1.0f);
+            host.set("dly_time", 200.0f);
+            host.set("dly_feedback", 0.0f);
+            host.set("dly_drive", 0.0f);
+            host.set("dly_wow", pass == 0 ? 0.0f : 1.0f);
+            host.set("dly_mix", 1.0f);
+            host.prepare(sampleRate, blockSize);
+            std::vector<float> out;
+            renderThroughHost(host, makeSine(512 * 400, sampleRate, 1000.0f, 0.3f), out);
+            float lo = 1.0e9f, hi = 0.0f;
+            for (size_t start = 24000; start + 9600 < out.size(); start += 4800) // 200 ms windows over about 3.5 s
+            {
+                const float f = estimateFrequency(out, start, 9600, sampleRate);
+                lo = std::min(lo, f);
+                hi = std::max(hi, f);
+            }
+            spread[pass] = hi - lo;
+        }
+        std::cout << "  -> pitch range of a 1 kHz tone in Tape mode: wow 0 -> " << spread[0] << " Hz, wow 1 -> " << spread[1] << " Hz" << std::endl;
+        check(spread[0] < 0.5f, "with wow 0 the tape repeats must keep a steady pitch");
+        check(spread[1] > 2.0f, "with wow 1 the tape repeats must vary in pitch");
+    }
+
+    std::cout << "  -> PASS\n" << std::endl;
+}
+
+static void testDelayTimeChangeDuckingBypass()
+{
+    std::cout << "[Delay 4/6] Delay: time-change crossfade / pitch bend, ducking, bypass tail, granular timing, zero allocation..." << std::endl;
+    const double sampleRate = 48000.0;
+    const int blockSize = 512;
+
+    // Plays a steady tone, changes dly_time from 200 to 400 ms after 1 second, returns the wet output.
+    auto timeChange = [&](int mode, float toneHz, std::vector<float>& out) {
+        DelayGrainPair pair;
+        ModuleTestHost host(pair);
+        host.set("dly_mode", static_cast<float>(mode));
+        host.set("dly_time", 200.0f);
+        host.set("dly_feedback", 0.0f);
+        host.set("dly_wow", 0.0f);
+        host.set("dly_drive", 0.0f);
+        host.set("dly_mix", 1.0f);
+        host.set("grain_spray", 0.0f);
+        host.set("grain_spread", 0.0f);
+        host.prepare(sampleRate, blockSize);
+
+        const auto input = makeSine(512 * 290, sampleRate, toneHz, 0.5f);
+        juce::AudioBuffer<float> buffer(2, blockSize);
+        out.assign(input.size(), 0.0f);
+        for (size_t pos = 0; pos + blockSize <= input.size(); pos += blockSize)
+        {
+            if (pos == static_cast<size_t>(blockSize) * 94) // about 1.0 s
+                host.set("dly_time", 400.0f);
+            for (int i = 0; i < blockSize; ++i)
+            {
+                buffer.setSample(0, i, input[pos + static_cast<size_t>(i)]);
+                buffer.setSample(1, i, input[pos + static_cast<size_t>(i)]);
+            }
+            host.run(buffer);
+            for (int i = 0; i < blockSize; ++i)
+                out[pos + static_cast<size_t>(i)] = buffer.getSample(0, i);
+        }
+    };
+    const size_t changeAt = 512 * 94;
+
+    // --- Scenario: Clean and Granular time change crossfades (no click) ---
+    for (int mode : { 0, 3 })
+    {
+        std::vector<float> out;
+        timeChange(mode, 100.0f, out);
+        float worstStep = 0.0f;
+        for (size_t n = 24000; n < out.size(); ++n)
+            worstStep = std::max(worstStep, std::abs(out[n] - out[n - 1]));
+        std::cout << "  -> " << wvzz::modules::getDelayModeNames()[mode] << ": largest sample-to-sample step across the time change = "
+                  << worstStep << " (a 100 Hz tone at 0.5 steps by 0.0065)" << std::endl;
+        check(worstStep < 0.03f, "a time change in Clean / Granular mode must not click");
+    }
+
+    // Clean keeps the pitch during the 50 ms crossfade and has the new time afterwards
+    {
+        std::vector<float> out;
+        timeChange(0, 1000.0f, out);
+        const float during = estimateFrequency(out, changeAt + 4800, 9600, sampleRate);
+        check(std::abs(during - 1000.0f) < 5.0f, "Clean mode must not bend the pitch on a time change");
+    }
+
+    // --- Scenario: Tape and BBD time change bends the pitch ---
+    for (int mode : { 1, 2 })
+    {
+        std::vector<float> out;
+        timeChange(mode, 1000.0f, out);
+        const float before = estimateFrequency(out, changeAt - 14400, 9600, sampleRate);
+        const float during = estimateFrequency(out, changeAt + 480, 4800, sampleRate);
+        const float after  = estimateFrequency(out, changeAt + 86400, 9600, sampleRate); // 1.8 s later
+        std::cout << "  -> " << wvzz::modules::getDelayModeNames()[mode] << ": pitch before " << before << " Hz, during the glide "
+                  << during << " Hz, after " << after << " Hz" << std::endl;
+        check(std::abs(before - 1000.0f) < 2.0f, "before the change the repeats must be at the input pitch");
+        check(during < 900.0f && during > 500.0f, "while the time glides up, the pitch of the repeats must drop (and not reverse)");
+        check(std::abs(after - 1000.0f) < 5.0f, "after the glide the pitch must return to the input pitch");
+    }
+
+    // --- Scenario: Wet level drops under the dry signal, and returns after it stops ---
+    {
+        float wetDuring[2] = { 0.0f, 0.0f }, wetAfter[2] = { 0.0f, 0.0f };
+        for (int pass = 0; pass < 2; ++pass)
+        {
+            wvzz::modules::DelayDSP delay("dly");
+            ModuleTestHost host(delay);
+            host.set("dly_time", 100.0f);
+            host.set("dly_feedback", 0.8f);
+            host.set("dly_mix", 0.5f);
+            host.set("dly_duck", pass == 0 ? 0.0f : 1.0f);
+            host.prepare(sampleRate, blockSize);
+
+            auto input = makeSine(512 * 190, sampleRate, 500.0f, 0.5f);
+            for (size_t n = 48000; n < input.size(); ++n) // dry signal stops after 1 second
+                input[n] = 0.0f;
+            std::vector<float> out;
+            renderThroughHost(host, input, out);
+            std::vector<float> wet(out.size());
+            for (size_t n = 0; n < out.size(); ++n)
+                wet[n] = out[n] - 0.5f * input[n];
+            wetDuring[pass] = rmsOf(wet, 28800, 14400);
+            wetAfter[pass]  = rmsOf(wet, 48000 + 38400, 9600); // 0.8 .. 1.0 s after the stop (release is 250 ms)
+        }
+        std::cout << "  -> wet RMS while the dry signal plays: duck 0 -> " << wetDuring[0] << ", duck 1 -> " << wetDuring[1]
+                  << "; 0.8 s after it stops: " << wetAfter[0] << " vs " << wetAfter[1] << std::endl;
+        check(wetDuring[1] < wetDuring[0] * 0.2f, "ducking must lower the wet level while the dry signal is present");
+        check(wetAfter[1] > wetAfter[0] * 0.8f, "after the dry signal stops the repeats must return to full level");
+    }
+
+    // --- Scenario: Tail continues after bypass; no new repeats are recorded ---
+    {
+        wvzz::modules::DelayDSP delay("dly");
+        ModuleTestHost host(delay);
+        host.set("dly_time", 100.0f);
+        host.set("dly_feedback", 0.7f);
+        host.set("dly_mix", 0.5f);
+        host.prepare(sampleRate, blockSize);
+
+        juce::AudioBuffer<float> buffer(2, blockSize), input(2, blockSize);
+        juce::Random rng(8);
+        for (int b = 0; b < 20; ++b) // 0.2 s of noise
+        {
+            fillNoise(buffer, rng, 0.5f);
+            host.run(buffer);
+        }
+        host.set("dly_bypass", 1.0f);
+        float tailEarly = 0.0f, tailLate = 0.0f;
+        for (int b = 0; b < 400; ++b) // 4.3 s of silence
+        {
+            buffer.clear();
+            host.run(buffer);
+            if (b >= 10 && b < 40)   tailEarly = std::max(tailEarly, buffer.getMagnitude(0, blockSize));
+            if (b >= 380)            tailLate  = std::max(tailLate,  buffer.getMagnitude(0, blockSize));
+        }
+        std::cout << "  -> after bypass: tail peak 0.1-0.4 s = " << tailEarly << ", after 4 s = " << tailLate << std::endl;
+        check(tailEarly > 0.01f, "the repeats must keep playing after bypass is turned on");
+        check(tailLate < tailEarly * 0.01f, "the tail must decay after bypass");
+
+        // --- Scenario: Bypassed and empty is transparent; audio played now creates no repeats ---
+        float worst = 0.0f;
+        for (int b = 0; b < 60; ++b)
+        {
+            if (b < 10) fillNoise(buffer, rng, 0.5f); else buffer.clear();
+            input.makeCopyOf(buffer);
+            host.run(buffer);
+            worst = std::max(worst, maxAbsDiff(buffer, input));
+        }
+        std::cout << "  -> bypassed: max difference between output and input = " << worst << std::endl;
+        check(worst < 2.0e-4f, "a bypassed, empty delay must output the input and record no new repeats");
+    }
+
+    // --- Scenario: Granular delay keeps the delay time ---
+    {
+        DelayGrainPair pair;
+        ModuleTestHost host(pair);
+        host.set("dly_mode", 3.0f);
+        host.set("dly_time", 300.0f);
+        host.set("dly_feedback", 0.0f);
+        host.set("dly_mix", 1.0f);
+        host.set("grain_pitch", 0.0f);
+        host.set("grain_spray", 0.0f);
+        host.prepare(sampleRate, blockSize);
+
+        std::vector<float> input(512 * 80, 0.0f);
+        juce::Random rng(4);
+        for (size_t n = 0; n < 960; ++n) // 20 ms burst, centre at 10 ms
+            input[n] = (rng.nextFloat() * 2.0f - 1.0f) * 0.5f;
+        std::vector<float> out;
+        renderThroughHost(host, input, out);
+        double weighted = 0.0, total = 0.0;
+        for (size_t n = 0; n < out.size(); ++n)
+        {
+            weighted += static_cast<double>(n) * out[n] * out[n];
+            total += static_cast<double>(out[n]) * out[n];
+        }
+        const double centreMs = (total > 0.0) ? (weighted / total) * 1000.0 / sampleRate : 0.0;
+        std::cout << "  -> granular, 300 ms: energy centre of the repeat at " << centreMs << " ms (burst centre + delay = 310 ms)" << std::endl;
+        check(total > 1.0e-4 && std::abs(centreMs - 310.0) < 15.0, "granular repeats must be centered at the set delay time");
+    }
+
+    // --- Zero allocation in every mode, and prefixing ---
+    for (int mode = 0; mode < 4; ++mode)
+    {
+        DelayGrainPair pair;
+        ModuleTestHost host(pair);
+        host.set("dly_mode", static_cast<float>(mode));
+        host.set("dly_feedback", 0.8f);
+        host.set("dly_diffusion", 0.7f);
+        host.set("dly_duck", 0.5f);
+        host.set("dly_routing", 1.0f);
+        host.prepare(sampleRate, blockSize);
+        juce::AudioBuffer<float> buffer(2, blockSize);
+        generateSineWave(buffer, sampleRate, 440.0f);
+        host.run(buffer);
+        g_allocationCount = 0;
+        g_trackingAllocations = true;
+        for (int b = 0; b < 1000; ++b)
+        {
+            generateSineWave(buffer, sampleRate, 440.0f);
+            if (b == 500)
+                pair.delay.reset(); // reset must not allocate either
+            host.run(buffer);
+        }
+        g_trackingAllocations = false;
+        if (g_allocationCount != 0)
+        {
+            std::cerr << "FAIL: delay mode " << mode << " allocated " << g_allocationCount << " times while processing" << std::endl;
+            std::exit(1);
+        }
+    }
+    std::cout << "  -> heap allocations in 1,000 blocks, each of the 4 modes: 0" << std::endl;
+    {
+        wvzz::modules::DelayDSP delay("slot2_dly");
+        ModuleTestHost host(delay);
+        check(host.getAPVTS().getParameter("slot2_dly_feedback") != nullptr && host.getAPVTS().getParameter("dly_feedback") == nullptr,
+              "delay parameter ids must use the instance prefix");
+    }
+
+    std::cout << "  -> PASS\n" << std::endl;
+}
+
+static void testWvZzDelayPlugin()
+{
+    std::cout << "[Delay 5/6] Plugin: presets, history, tail length, modulation profile, zero allocation..." << std::endl;
+
+    wvzz::WvZzDelayAudioProcessor processor;
+    processor.prepareToPlay(48000.0, 512);
+    check(processor.getName() == "WvZz Delay", "plugin name");
+
+    const auto& presets = wvzz::delayfx::getFactoryPresets();
+    check(presets.size() == 10 && processor.getNumPrograms() == 10, "WvZz Delay must have 10 factory presets");
+    check(processor.getCurrentProgram() == 0, "the plugin must start on program 0");
+
+    juce::AudioBuffer<float> buffer(2, 512);
+    juce::MidiBuffer midi;
+
+    // --- Scenario: All presets load and stay stable ---
+    for (int i = 0; i < 10; ++i)
+    {
+        processor.setCurrentProgram(i);
+        check(processor.getProgramName(i) == juce::String(presets[static_cast<size_t>(i)].name), "preset name mismatch");
+        for (const auto& [paramId, value] : presets[static_cast<size_t>(i)].values)
+        {
+            auto* param = dynamic_cast<juce::RangedAudioParameter*>(processor.getAPVTS().getParameter(paramId));
+            check(param != nullptr, paramId);
+            const float actual = param->convertFrom0to1(param->getValue());
+            if (std::abs(actual - value) > 0.02f * std::max(1.0f, std::abs(value)))
+            {
+                std::cerr << "FAIL: preset '" << presets[static_cast<size_t>(i)].name << "' " << paramId
+                          << " = " << actual << ", expected " << value << std::endl;
+                std::exit(1);
+            }
+        }
+        for (int b = 0; b < 200; ++b) // about 2 s, so the feedback loop runs many times
+        {
+            generateSineWave(buffer, 48000.0, 220.0f);
+            processor.processBlock(buffer, midi);
+            check(allFinite(buffer, 8.0f), "preset output must be finite");
+        }
+        check(processor.getTailLengthSeconds() > 0.0 && processor.getTailLengthSeconds() <= 60.0, "tail length must be in (0, 60] s");
+    }
+
+    // --- Scenario: Preset result is independent of history ---
+    auto snapshot = [&processor]() {
+        std::vector<float> values;
+        for (auto* param : processor.getParameters())
+            values.push_back(param->getValue());
+        return values;
+    };
+    processor.setCurrentProgram(0);
+    const auto direct = snapshot();
+    processor.setCurrentProgram(9);
+    processor.setCurrentProgram(0);
+    check(direct == snapshot(), "loading a preset must give the same parameter values whatever was loaded before");
+
+    // --- Session recall: parameters and the selected preset come back from saved state ---
+    {
+        processor.setCurrentProgram(6);
+        juce::MemoryBlock saved;
+        processor.getStateInformation(saved);
+        const auto savedValues = snapshot();
+        processor.setCurrentProgram(2);
+        processor.setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
+        check(processor.getCurrentProgram() == 6, "the selected preset must be restored with the state");
+        check(savedValues == snapshot(), "all parameter values must be restored with the state");
+    }
+
+    // --- Scenario: Tail grows with feedback (time 500 ms) ---
+    auto& apvts = processor.getAPVTS();
+    resetPluginToDefaults(processor);
+    setPluginParam(apvts, "dly_time", 500.0f);
+    setPluginParam(apvts, "dly_feedback", 0.2f);
+    const double tailLow = processor.getTailLengthSeconds();
+    setPluginParam(apvts, "dly_feedback", 0.9f);
+    const double tailHigh = processor.getTailLengthSeconds();
+    setPluginParam(apvts, "dly_feedback", 1.0f);
+    const double tailFull = processor.getTailLengthSeconds();
+    std::cout << "  -> tail at 500 ms: feedback 0.2 -> " << tailLow << " s, 0.9 -> " << tailHigh << " s, 1.0 -> " << tailFull << " s" << std::endl;
+    check(tailLow >= 0.5 && tailHigh > tailLow * 5.0 && std::abs(tailFull - 60.0) < 1.0e-9, "tail length must follow time and feedback, 60 s at 100%");
+
+    // --- Modulation profile: lists and LFO delivery to Feedback ---
+    const auto& delayNames = wvzz::modules::getModTargetNames(wvzz::ModProfile::Delay);
+    check(delayNames.size() == 14 && delayNames[2] == "Feedback" && delayNames[13] == "Master Vol", "Delay profile must list None + 13 targets");
+    check(wvzz::modules::getModTargetNames(wvzz::ModProfile::Distortion).size() == 22
+          && wvzz::modules::getModTargetNames(wvzz::ModProfile::Dynamics).size() == 16
+          && wvzz::modules::getModTargetNames(wvzz::ModProfile::Modulation).size() == 15, "other profiles must keep their lists");
+    check(static_cast<int>(wvzz::ModTarget::ModTremDepth) == 42 && static_cast<int>(wvzz::ModTarget::DlyTime) == 43,
+          "existing ModTarget values must not move");
+    check(wvzz::modules::getModTargetForIndex(2, wvzz::ModProfile::Delay) == wvzz::ModTarget::DlyFeedback
+          && wvzz::modules::getModTargetForIndex(9, wvzz::ModProfile::Delay) == wvzz::ModTarget::GrainPitch, "Delay profile index mapping");
+
+    setPluginParam(apvts, "lfo1_target", 2.0f);
+    setPluginParam(apvts, "lfo1_depth", 1.0f);
+    setPluginParam(apvts, "lfo1_rate", 5.0f);
+    bool sawOffset = false;
+    for (int b = 0; b < 10; ++b)
+    {
+        buffer.clear();
+        processor.processBlock(buffer, midi);
+        if (std::abs(processor.getModulationModule().getModulationDSP().getOffset(wvzz::ModTarget::DlyFeedback)) > 0.01f)
+            sawOffset = true;
+    }
+    check(sawOffset, "LFO 1 must deliver a non-zero offset to the Feedback target");
+
+    // --- Plugin zero allocation: tape preset and granular preset ---
+    for (int program : { 3, 8 })
+    {
+        processor.setCurrentProgram(program);
+        generateSineWave(buffer, 48000.0, 440.0f);
+        processor.processBlock(buffer, midi);
+        g_allocationCount = 0;
+        g_trackingAllocations = true;
+        for (int i = 0; i < 1000; ++i)
+        {
+            generateSineWave(buffer, 48000.0, 440.0f);
+            processor.processBlock(buffer, midi);
+        }
+        g_trackingAllocations = false;
+        if (g_allocationCount != 0)
+        {
+            std::cerr << "FAIL: WvZz Delay preset " << program << " allocated " << g_allocationCount << " times on the audio thread" << std::endl;
+            std::exit(1);
+        }
+    }
+    std::cout << "  -> heap allocations in 1,000 processBlock() calls (tape preset, granular preset): 0" << std::endl;
+
+    std::cout << "  -> PASS\n" << std::endl;
+}
+
+static void testWvZzDelayEditorAndTaps()
+{
+    std::cout << "[Delay 6/6] Editor at 1080x680, TAPS display, published tap state, tap layout..." << std::endl;
+
+    wvzz::WvZzDelayAudioProcessor processor;
+    processor.setCurrentProgram(1); // Dotted Eighth Ping-Pong
+    processor.prepareToPlay(48000.0, 512);
+
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    check(editor != nullptr, "createEditor() returned null for WvZz Delay");
+    editor->setSize(1080, 680);
+    check(editor->getWidth() == 1080 && editor->getHeight() == 680, "WvZz Delay editor must be 1080x680");
+
+    std::function<int(juce::Component&)> countDisplays = [&countDisplays](juce::Component& c) {
+        int n = (dynamic_cast<wvzz::ui::DelayTapDisplayComponent*>(&c) != nullptr) ? 1 : 0;
+        for (auto* child : c.getChildren())
+            n += countDisplays(*child);
+        return n;
+    };
+    check(countDisplays(*editor) == 1, "WvZz Delay editor must contain one delay-tap display");
+
+    // The audio thread publishes the delay state for the display
+    juce::AudioBuffer<float> buffer(2, 512);
+    juce::MidiBuffer midi;
+    generateSineWave(buffer, 48000.0, 440.0f);
+    processor.processBlock(buffer, midi);
+    const auto& state = processor.getDelayModule().getDelayDSP().getTapState();
+    check(state.active.load() && state.pingPong.load(), "tap state must report an active ping-pong delay for preset 2");
+    check(std::abs(state.timeLeftMs.load() - 375.0f) < 0.5f, "dotted eighth at 120 BPM must be published as 375 ms");
+    check(std::abs(state.feedback.load() - 0.5f) < 0.01f, "tap state must carry the feedback value");
+
+    setPluginParam(processor.getAPVTS(), "dly_bypass", 1.0f);
+    processor.processBlock(buffer, midi);
+    check(!state.active.load(), "a bypassed delay must publish an inactive tap state");
+
+    // --- Scenario: Ping-pong shows alternating sides; taps follow time and feedback ---
+    using Display = wvzz::ui::DelayTapDisplayComponent;
+    const auto pingPong = Display::computeTaps(100.0f, 100.0f, 0.5f, true);
+    check(pingPong.size() >= 4 && !pingPong[0].rightChannel && pingPong[1].rightChannel && !pingPong[2].rightChannel,
+          "ping-pong taps must alternate left, right, left");
+    check(std::abs(pingPong[1].timeMs - 200.0f) < 1.0e-3f && std::abs(pingPong[1].level - 0.5f) < 1.0e-5f,
+          "the second tap must be at twice the time with the feedback level");
+    const auto offsetPingPong = Display::computeTaps(100.0f, 110.0f, 0.5f, true);
+    check(std::abs(offsetPingPong[1].timeMs - 210.0f) < 1.0e-3f && std::abs(offsetPingPong[2].timeMs - 310.0f) < 1.0e-3f,
+          "ping-pong taps must add the right time on right repeats (left 100 ms, right 110 ms -> 100, 210, 310)");
+    const auto stereo = Display::computeTaps(100.0f, 110.0f, 0.5f, false);
+    int leftCount = 0, rightCount = 0;
+    for (const auto& tap : stereo) (tap.rightChannel ? rightCount : leftCount)++;
+    check(leftCount == rightCount && leftCount >= 4, "stereo taps must show the same number of repeats on both sides");
+    check(Display::computeTaps(100.0f, 100.0f, 0.0f, false).size() == 2, "with feedback 0 there is one repeat per side");
+    check(Display::computeTaps(100.0f, 100.0f, 0.9f, false).size() > stereo.size(), "more feedback must show more repeats");
+
+    std::cout << "  -> PASS\n" << std::endl;
+}
+
 int main(int, char*[])
 {
     std::cout << "=====================================================" << std::endl;
@@ -2122,8 +2936,16 @@ int main(int, char*[])
         testWvZzModulationTargets();
         testWvZzModulationEditorAndScope();
 
+        // Delay suites
+        testDelayLineAndGrain();
+        testDelayTimingAndRouting();
+        testDelayFeedbackAndModes();
+        testDelayTimeChangeDuckingBypass();
+        testWvZzDelayPlugin();
+        testWvZzDelayEditorAndTaps();
+
         std::cout << "=====================================================" << std::endl;
-        std::cout << "   ALL 28 DSP SUITES PASSED (100% SUCCESS)           " << std::endl;
+        std::cout << "   ALL 34 DSP SUITES PASSED (100% SUCCESS)           " << std::endl;
         std::cout << "=====================================================" << std::endl;
         return 0;
     }

@@ -97,10 +97,28 @@ inline const juce::StringArray& getModTargetNames(ModProfile profile = ModProfil
         "Master Vol"
     };
 
+    static const juce::StringArray delayNames {
+        "None",
+        "Delay Time",
+        "Feedback",
+        "LP Cutoff",
+        "HP Cutoff",
+        "Diffusion",
+        "Wow",
+        "Delay Mix",
+        "Grain Size",
+        "Grain Pitch",
+        "Grain Spray",
+        "Master Mix",
+        "LFO 2 Rate",
+        "Master Vol"
+    };
+
     switch (profile)
     {
         case ModProfile::Dynamics:   return dynNames;
         case ModProfile::Modulation: return modFxNames;
+        case ModProfile::Delay:      return delayNames;
         case ModProfile::Distortion: break;
     }
     return distNames;
@@ -123,6 +141,19 @@ inline ModTarget getModTargetForIndex(int index, ModProfile profile = ModProfile
             ModTarget::ModPhsRate, ModTarget::ModPhsCenter, ModTarget::ModPhsFeedback, ModTarget::ModPhsMix,
             ModTarget::FlangerRate, ModTarget::FlangerAmount,
             ModTarget::ModTremRate, ModTarget::ModTremDepth,
+            ModTarget::MasterMix, ModTarget::LFO2Rate, ModTarget::MasterVol
+        };
+        constexpr int mapSize = static_cast<int>(sizeof(map) / sizeof(map[0]));
+        return (index >= 0 && index < mapSize) ? map[index] : ModTarget::None;
+    }
+
+    if (profile == ModProfile::Delay)
+    {
+        static constexpr ModTarget map[] = {
+            ModTarget::None,
+            ModTarget::DlyTime, ModTarget::DlyFeedback, ModTarget::DlyLp, ModTarget::DlyHp,
+            ModTarget::DlyDiffusion, ModTarget::DlyWow, ModTarget::DlyMix,
+            ModTarget::GrainSize, ModTarget::GrainPitch, ModTarget::GrainSpray,
             ModTarget::MasterMix, ModTarget::LFO2Rate, ModTarget::MasterVol
         };
         constexpr int mapSize = static_cast<int>(sizeof(map) / sizeof(map[0]));

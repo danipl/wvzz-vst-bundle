@@ -91,6 +91,20 @@ All plugins in the WvZz suite are built as native **macOS Universal Binaries** (
 
 <br/>
 
+### 4. ⏱️ WvZz Delay *(Available Now)*
+
+> **Clean, Tape, BBD & Granular Stereo Delay**  
+> One delay with four modes, free or tempo-synced time up to 4 seconds, and a feedback loop that stays under control above 100%.
+
+| Key Capabilities | Highlights | Documentation |
+| :--- | :--- | :--- |
+| **Four Modes** | Clean (exact repeats), Tape (drive, wow and flutter), BBD (dark analog repeats), Granular (repeats rebuilt from grains). | 📖 **[Plugin Overview & DSP Guide](Plugins/WvZzDelay/README.md)** |
+| **Filtered Feedback Loop** | Feedback from 0% to 110% with high-pass, low-pass, and a soft clipper. All-pass diffusion smears the repeats. | 🎛️ **[Producer User Manual](Plugins/WvZzDelay/USER_MANUAL.md)** |
+| **Grain Engine** | 32 fixed voices with pitch shift of ±24 semitones, spray, reverse, and stereo spread. | 🧪 **[10 Factory Presets Included](Plugins/WvZzDelay/USER_MANUAL.md)** |
+| **Ducking, Ping-Pong & Tail** | The repeats get quieter while the dry signal plays. Bypass lets the tail fade out. The **TAPS** tab shows every repeat on a time axis. | 🛠️ **[Source Code (`Plugins/WvZzDelay`)](Plugins/WvZzDelay)** |
+
+<br/>
+
 ### 🗺️ Bundle Roadmap & Upcoming Plugins
 
 Because every DSP block lives in our shared `WvZzModules` library, the bundle is actively expanding into a complete production suite:
@@ -100,7 +114,7 @@ Because every DSP block lives in our shared `WvZzModules` library, the bundle is
 | **🔥 WvZz Distortion** | ✅ **Released** | Multi-circuit saturation, ZDF band-splitting, 12-mode filtering & Phat compression | `BPFilter` + `Distortion` + `MMFilter` + `Flanger` + `MagicEQ` + `Compressor` |
 | **🎚️ WvZz Dynamics** | ✅ **Released** | Sub lock, transient shaper & gate, 3-band OTT, bus compressor, tempo-synced pumper & maximizer clipper | `DynDetector` + `TransientShaper` + `MultibandOTT` + `Compressor` + `RhythmicPumper` + `MaximizerClipper` |
 | **🌊 WvZz Modulation** | ✅ **Released** | Multi-voice chorus, all-pass phaser, through-zero flanger & harmonic tremolo in a serial chain | `Chorus` + `Phaser` + `Flanger` + `Tremolo`, LFO phase scope |
-| **⏱️ WvZz Delay** | 🚧 *Planned* | Tape, analog BBD & granular stereo delay with ducking and filter diffusion | Fractional Lagrange delay lines, ZDF feedback filters, LFO/Env matrix |
+| **⏱️ WvZz Delay** | ✅ **Released** | Clean, tape, BBD & granular stereo delay with ducking, diffusion and feedback up to 110% | `Delay` + `Grain` (32 voices) on a shared `DelayLine`, delay-tap display |
 | **🌌 WvZz Reverb** | 🚧 *Planned* | Algorithmic plate, lush hall & non-linear shimmer spaces | Zero-allocation Feedback Delay Networks (FDN) & early reflection diffusers |
 
 ---
@@ -143,6 +157,8 @@ At the heart of the repository is `libWvZzModules.a` (`Source/Modules/`), a self
 9. **[`Chorus`](Source/Modules/Chorus/)**: 1 to 4 modulated delay voices on one delay line per channel, with stereo spread and soft-limited feedback.
 10. **[`Phaser`](Source/Modules/Phaser/)**: Cascade of 2 to 12 first-order all-pass sections swept by an LFO, with bipolar feedback and stereo LFO offset.
 11. **[`Tremolo`](Source/Modules/Tremolo/)**: Classic level tremolo and a harmonic mode that modulates the bands below and above a crossover in opposite phase.
+12. **[`Delay`](Source/Modules/Delay/)**: Reusable fractional `DelayLine` plus a stereo delay with Clean, Tape, BBD, and Granular modes, filtered feedback up to 110%, diffusion, ducking, and tail-preserving bypass.
+13. **[`Grain`](Source/Modules/Grain/)**: Grain engine with 32 pre-allocated voices, Hann windows, pitch shift, reverse, spray, and stereo spread.
 
 ---
 
