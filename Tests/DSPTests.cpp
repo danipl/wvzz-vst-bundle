@@ -3,6 +3,12 @@
 #include "Plugins/WvZzDynamics/PluginProcessor.h"
 #include "Plugins/WvZzDynamics/PluginEditor.h"
 #include "Plugins/WvZzDynamics/Presets/FactoryPresets.h"
+#include "Plugins/WvZzModulation/PluginProcessor.h"
+#include "Plugins/WvZzModulation/PluginEditor.h"
+#include "Modules/Chorus/ChorusModule.h"
+#include "Modules/Phaser/PhaserModule.h"
+#include "Modules/Tremolo/TremoloModule.h"
+#include "Core/UI/LfoPhaseScopeComponent.h"
 #include "Core/DSP/AudioVisualizerSource.h"
 #include "Modules/BPFilter/BPFilterModule.h"
 #include "Modules/Distortion/DistortionModule.h"
@@ -23,6 +29,8 @@
 #include <cmath>
 #include <cassert>
 #include <cstdlib>
+#include <algorithm>
+#include <functional>
 
 // ==============================================================================
 // Allocation Tracking Hook to assert zero heap allocations in real-time code
@@ -1196,6 +1204,883 @@ static void testWvZzDynamicsEditorLayoutAndNonOverlap()
     std::cout << "  -> PASS: WvZz Dynamics UI instantiated at 1080x680 canvas successfully.\n" << std::endl;
 }
 
+// ==============================================================================
+// WvZz Modulation suites (GH-15)
+// These use explicit checks, because assert() is compiled out in Release builds.
+// ==============================================================================
+static void check(bool condition, const char* message)
+{
+    if (!condition)
+    {
+        std::cerr << "FAIL: " << message << std::endl;
+        std::exit(1);
+    }
+}
+
+/** Minimal host for one DSP module: owns an APVTS built from the module's own parameters. */
+class ModuleTestHost : public juce::AudioProcessor
+{
+public:
+    explicit ModuleTestHost(wvzz::IDSPModule& moduleToHost)
+        : module(moduleToHost),
+          apvts(*this, nullptr, "Parameters", makeLayout(moduleToHost))
+    {
+        module.bindParameters(apvts);
+    }
+
+    void set(const juce::String& paramId, float value)
+    {
+        auto* param = apvts.getParameter(paramId);
+        check(param != nullptr, ("unknown parameter id: " + paramId).toRawUTF8());
+        param->setValueNotifyingHost(param->convertTo0to1(value));
+    }
+
+    void prepare(double sampleRate, int blockSize)
+    {
+        module.prepare({ sampleRate, static_cast<juce::uint32>(blockSize), 2 });
+        dry.setSize(2, blockSize);
+        aux.setSize(2, blockSize);
+        dry.clear();
+        aux.clear();
+    }
+
+    /** Runs the module on the buffer with no modulation offsets. */
+    void run(juce::AudioBuffer<float>& buffer) noexcept
+    {
+        bool hasAux = false;
+        wvzz::ProcessContext ctx { buffer, dry, aux, hasAux };
+        module.process(ctx);
+    }
+
+    const juce::String getName() const override { return "ModuleTestHost"; }
+    void prepareToPlay(double, int) override {}
+    void releaseResources() override {}
+    void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override {}
+    juce::AudioProcessorEditor* createEditor() override { return nullptr; }
+    bool hasEditor() const override { return false; }
+    bool acceptsMidi() const override { return false; }
+    bool producesMidi() const override { return false; }
+    double getTailLengthSeconds() const override { return 0.0; }
+    int getNumPrograms() override { return 1; }
+    int getCurrentProgram() override { return 0; }
+    void setCurrentProgram(int) override {}
+    const juce::String getProgramName(int) override { return {}; }
+    void changeProgramName(int, const juce::String&) override {}
+    void getStateInformation(juce::MemoryBlock&) override {}
+    void setStateInformation(const void*, int) override {}
+
+    juce::AudioProcessorValueTreeState& getAPVTS() { return apvts; }
+
+private:
+    static juce::AudioProcessorValueTreeState::ParameterLayout makeLayout(wvzz::IDSPModule& m)
+    {
+        juce::AudioProcessorValueTreeState::ParameterLayout layout;
+        m.registerParameters(layout);
+        return layout;
+    }
+
+    wvzz::IDSPModule& module;
+    juce::AudioProcessorValueTreeState apvts;
+    juce::AudioBuffer<float> dry;
+    juce::AudioBuffer<float> aux;
+};
+
+static void fillNoise(juce::AudioBuffer<float>& buffer, juce::Random& rng, float amplitude)
+{
+    for (int i = 0; i < buffer.getNumSamples(); ++i)
+    {
+        const float v = (rng.nextFloat() * 2.0f - 1.0f) * amplitude;
+        for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+            buffer.setSample(ch, i, v); // same signal on every channel
+    }
+}
+
+/** Fills consecutive blocks of one continuous sine (phase carried by the caller). */
+static void fillSineBlock(juce::AudioBuffer<float>& buffer, double sampleRate, float hz, double& phase, float amplitude)
+{
+    const double inc = juce::MathConstants<double>::twoPi * hz / sampleRate;
+    for (int i = 0; i < buffer.getNumSamples(); ++i)
+    {
+        const float v = static_cast<float>(std::sin(phase)) * amplitude;
+        for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+            buffer.setSample(ch, i, v);
+        phase += inc;
+    }
+}
+
+static float maxAbsDiff(const juce::AudioBuffer<float>& a, const juce::AudioBuffer<float>& b)
+{
+    float worst = 0.0f;
+    for (int ch = 0; ch < juce::jmin(a.getNumChannels(), b.getNumChannels()); ++ch)
+        for (int i = 0; i < juce::jmin(a.getNumSamples(), b.getNumSamples()); ++i)
+            worst = std::max(worst, std::abs(a.getSample(ch, i) - b.getSample(ch, i)));
+    return worst;
+}
+
+static bool allFinite(const juce::AudioBuffer<float>& buffer, float limit)
+{
+    for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+        for (int i = 0; i < buffer.getNumSamples(); ++i)
+        {
+            const float v = buffer.getSample(ch, i);
+            if (!std::isfinite(v) || std::abs(v) >= limit)
+                return false;
+        }
+    return true;
+}
+
+/** Pearson correlation of two equally long series. */
+static float correlation(const std::vector<float>& a, const std::vector<float>& b)
+{
+    const size_t n = std::min(a.size(), b.size());
+    double meanA = 0.0, meanB = 0.0;
+    for (size_t i = 0; i < n; ++i) { meanA += a[i]; meanB += b[i]; }
+    meanA /= static_cast<double>(n);
+    meanB /= static_cast<double>(n);
+    double cov = 0.0, varA = 0.0, varB = 0.0;
+    for (size_t i = 0; i < n; ++i)
+    {
+        cov  += (a[i] - meanA) * (b[i] - meanB);
+        varA += (a[i] - meanA) * (a[i] - meanA);
+        varB += (b[i] - meanB) * (b[i] - meanB);
+    }
+    return static_cast<float>(cov / std::sqrt(std::max(1e-30, varA * varB)));
+}
+
+/**
+ * The flanger algorithm exactly as it was before flg_feedback / flg_depth / flg_center existed
+ * (fixed 2.5 ms center, +/-2.0 ms depth, 0.55 feedback). Reference for the equivalence test.
+ */
+class LegacyFlangerReference
+{
+public:
+    void prepare(double sr)
+    {
+        sampleRate = sr;
+        maxDelaySamples = static_cast<int>(sampleRate * 0.02) + 16;
+        bufL.assign(static_cast<size_t>(maxDelaySamples), 0.0f);
+        bufR.assign(static_cast<size_t>(maxDelaySamples), 0.0f);
+    }
+
+    void process(juce::AudioBuffer<float>& buffer, float rateHz, float amount)
+    {
+        float* l = buffer.getWritePointer(0);
+        float* r = buffer.getWritePointer(1);
+        const double phaseIncrement = (juce::MathConstants<double>::twoPi * rateHz) / sampleRate;
+        const float centerDelaySamples = static_cast<float>(sampleRate * 0.0025);
+        const float sweepModSamples    = static_cast<float>(sampleRate * 0.0020);
+        constexpr float fixedFeedback  = 0.55f;
+
+        for (int i = 0; i < buffer.getNumSamples(); ++i)
+        {
+            const float lfoL = static_cast<float>(std::sin(lfoPhase));
+            const float lfoR = static_cast<float>(std::sin(lfoPhase + juce::MathConstants<double>::halfPi));
+            lfoPhase += phaseIncrement;
+            if (lfoPhase >= juce::MathConstants<double>::twoPi)
+                lfoPhase -= juce::MathConstants<double>::twoPi;
+
+            const float inL = l[i];
+            const float delayedL = read(bufL, centerDelaySamples + sweepModSamples * lfoL);
+            bufL[static_cast<size_t>(writeIndex)] = inL + std::tanh(fixedFeedback * fbL);
+            fbL = delayedL;
+            l[i] = (1.0f - amount) * inL + amount * delayedL;
+
+            const float inR = r[i];
+            const float delayedR = read(bufR, centerDelaySamples + sweepModSamples * lfoR);
+            bufR[static_cast<size_t>(writeIndex)] = inR + std::tanh(fixedFeedback * fbR);
+            fbR = delayedR;
+            r[i] = (1.0f - amount) * inR + amount * delayedR;
+
+            if (++writeIndex >= maxDelaySamples)
+                writeIndex = 0;
+        }
+    }
+
+private:
+    float read(const std::vector<float>& buf, float delay) const
+    {
+        float readPos = static_cast<float>(writeIndex) - delay;
+        while (readPos < 0.0f)
+            readPos += static_cast<float>(maxDelaySamples);
+        const int i1 = static_cast<int>(readPos);
+        const int i0 = (i1 - 1 + maxDelaySamples) % maxDelaySamples;
+        const int i2 = (i1 + 1) % maxDelaySamples;
+        const int i3 = (i1 + 2) % maxDelaySamples;
+        const float d = readPos - static_cast<float>(i1);
+        const float c0 = -d * (d - 1.0f) * (d - 2.0f) / 6.0f;
+        const float c1 = (d + 1.0f) * (d - 1.0f) * (d - 2.0f) / 2.0f;
+        const float c2 = -(d + 1.0f) * d * (d - 2.0f) / 2.0f;
+        const float c3 = (d + 1.0f) * d * (d - 1.0f) / 6.0f;
+        return c0 * buf[static_cast<size_t>(i0)] + c1 * buf[static_cast<size_t>(i1)]
+             + c2 * buf[static_cast<size_t>(i2)] + c3 * buf[static_cast<size_t>(i3)];
+    }
+
+    double sampleRate { 48000.0 };
+    int maxDelaySamples { 0 };
+    int writeIndex { 0 };
+    double lfoPhase { 0.0 };
+    float fbL { 0.0f }, fbR { 0.0f };
+    std::vector<float> bufL, bufR;
+};
+
+static void testFlangerExtension()
+{
+    std::cout << "[Modulation 1/9] Flanger: default equivalence, through-zero, negative feedback..." << std::endl;
+
+    const double sampleRate = 48000.0;
+    const int blockSize = 512;
+
+    // --- Scenario: Default values keep the previous sound (APVTS-bound, as in WvZz Distortion) ---
+    {
+        wvzz::modules::FlangerDSP flanger("flg");
+        ModuleTestHost host(flanger);
+        host.set("flg_bypass", 0.0f);
+        host.set("flg_rate", 0.4f);
+        host.set("flg_amount", 0.7f);
+        host.prepare(sampleRate, blockSize);
+
+        LegacyFlangerReference reference;
+        reference.prepare(sampleRate);
+
+        juce::Random rng(42);
+        juce::AudioBuffer<float> actual(2, blockSize), expected(2, blockSize);
+        float worst = 0.0f;
+        for (int b = 0; b < 200; ++b) // about 2.1 s: more than 0.8 of an LFO cycle
+        {
+            fillNoise(actual, rng, 0.5f);
+            actual.applyGain(1, 0, blockSize, -0.8f); // different right channel
+            expected.makeCopyOf(actual);
+            host.run(actual);
+            // Rate and amount existed before; the reference reads the same stored parameter values.
+            reference.process(expected,
+                              host.getAPVTS().getRawParameterValue("flg_rate")->load(),
+                              host.getAPVTS().getRawParameterValue("flg_amount")->load());
+            worst = std::max(worst, maxAbsDiff(actual, expected));
+        }
+        std::cout << "  -> default flanger vs previous algorithm: max difference " << worst << std::endl;
+        check(worst < 1.0e-5f, "extended flanger with default values must equal the previous flanger");
+    }
+
+    // --- Scenario: Through-zero mode. With depth 0 and feedback 0 the wet and the delayed dry path coincide. ---
+    {
+        wvzz::modules::FlangerDSP flanger("flg");
+        ModuleTestHost host(flanger);
+        host.set("flg_bypass", 0.0f);
+        host.set("flg_amount", 0.5f);
+        host.set("flg_feedback", 0.0f);
+        host.set("flg_depth", 0.0f);
+        host.set("flg_center", 2.5f);
+        host.set("flg_tzero", 1.0f);
+        host.prepare(sampleRate, blockSize);
+
+        const int centerSamples = 120; // 2.5 ms at 48 kHz
+        juce::Random rng(7);
+        std::vector<float> input, output;
+        juce::AudioBuffer<float> buffer(2, blockSize);
+        for (int b = 0; b < 8; ++b)
+        {
+            fillNoise(buffer, rng, 0.5f);
+            for (int i = 0; i < blockSize; ++i) input.push_back(buffer.getSample(0, i));
+            host.run(buffer);
+            for (int i = 0; i < blockSize; ++i) output.push_back(buffer.getSample(0, i));
+        }
+        float worst = 0.0f;
+        for (size_t n = static_cast<size_t>(centerSamples) + 8; n < output.size(); ++n)
+            worst = std::max(worst, std::abs(output[n] - input[n - static_cast<size_t>(centerSamples)]));
+        std::cout << "  -> through-zero, depth 0: output vs input delayed by 2.5 ms: max difference " << worst << std::endl;
+        check(worst < 1.0e-3f, "through-zero must delay the dry path by flg_center");
+
+        // With through-zero off, the dry path is not delayed, so the result is different.
+        wvzz::modules::FlangerDSP normal("flg");
+        ModuleTestHost normalHost(normal);
+        normalHost.set("flg_bypass", 0.0f);
+        normalHost.set("flg_amount", 0.5f);
+        normalHost.set("flg_feedback", 0.0f);
+        normalHost.set("flg_depth", 0.0f);
+        normalHost.prepare(sampleRate, blockSize);
+        juce::Random rng2(7);
+        fillNoise(buffer, rng2, 0.5f);
+        juce::AudioBuffer<float> in(2, blockSize);
+        in.makeCopyOf(buffer);
+        normalHost.run(buffer);
+        check(std::abs(buffer.getSample(0, 300) - (0.5f * in.getSample(0, 300) + 0.5f * in.getSample(0, 300 - centerSamples))) < 1.0e-3f,
+              "with through-zero off the dry path must not be delayed");
+    }
+
+    // --- Scenario: Negative feedback stays finite and differs from positive feedback ---
+    {
+        juce::AudioBuffer<float> outNeg(2, blockSize), outPos(2, blockSize);
+        for (int pass = 0; pass < 2; ++pass)
+        {
+            wvzz::modules::FlangerDSP flanger("flg");
+            ModuleTestHost host(flanger);
+            host.set("flg_bypass", 0.0f);
+            host.set("flg_amount", 0.5f);
+            host.set("flg_feedback", pass == 0 ? -0.95f : 0.95f);
+            host.prepare(sampleRate, blockSize);
+            juce::Random rng(11);
+            auto& out = (pass == 0) ? outNeg : outPos;
+            for (int b = 0; b < 190; ++b) // 2 s
+            {
+                fillNoise(out, rng, 1.0f);
+                host.run(out);
+                check(allFinite(out, 8.0f), "flanger output must stay finite and bounded at +/-0.95 feedback");
+            }
+        }
+        check(maxAbsDiff(outNeg, outPos) > 0.01f, "negative feedback must sound different from positive feedback");
+    }
+
+    std::cout << "  -> PASS\n" << std::endl;
+}
+
+static void testChorusModule()
+{
+    std::cout << "[Modulation 2/9] Chorus: voices, stereo spread, dry mix, zero allocation, prefix..." << std::endl;
+    const double sampleRate = 48000.0;
+    const int blockSize = 512;
+
+    // --- Scenario: Chorus adds modulated voices (output differs, level changes over time) ---
+    {
+        wvzz::modules::ChorusDSP chorus("chor");
+        ModuleTestHost host(chorus);
+        host.set("chor_bypass", 0.0f);
+        host.set("chor_mix", 0.5f);
+        host.set("chor_rate", 2.0f);
+        host.set("chor_depth", 0.8f);
+        host.set("chor_voices", 0.0f); // 1 voice: clearest beating against the dry tone
+        host.set("chor_spread", 0.0f);
+        host.prepare(sampleRate, blockSize);
+
+        juce::AudioBuffer<float> buffer(2, blockSize), input(2, blockSize);
+        double phase = 0.0;
+        float minRms = 10.0f, maxRms = 0.0f, worstDiff = 0.0f;
+        for (int b = 0; b < 100; ++b)
+        {
+            fillSineBlock(buffer, sampleRate, 440.0f, phase, 0.5f);
+            input.makeCopyOf(buffer);
+            host.run(buffer);
+            if (b > 10)
+            {
+                const float rms = calculateRms(buffer, 0);
+                minRms = std::min(minRms, rms);
+                maxRms = std::max(maxRms, rms);
+                worstDiff = std::max(worstDiff, maxAbsDiff(buffer, input));
+            }
+        }
+        std::cout << "  -> block RMS range " << minRms << " .. " << maxRms << std::endl;
+        check(worstDiff > 0.05f, "chorus output must differ from the input");
+        check(maxRms > minRms * 1.2f, "chorus level must change over time on a steady tone");
+    }
+
+    // --- Scenario: Stereo spread decorrelates the channels; spread 0 keeps them equal ---
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        wvzz::modules::ChorusDSP chorus("chor");
+        ModuleTestHost host(chorus);
+        host.set("chor_bypass", 0.0f);
+        host.set("chor_spread", pass == 0 ? 1.0f : 0.0f);
+        host.prepare(sampleRate, blockSize);
+
+        juce::AudioBuffer<float> buffer(2, blockSize);
+        double phase = 0.0;
+        float worstLR = 0.0f;
+        for (int b = 0; b < 40; ++b)
+        {
+            fillSineBlock(buffer, sampleRate, 440.0f, phase, 0.5f);
+            host.run(buffer);
+            for (int i = 0; i < blockSize; ++i)
+                worstLR = std::max(worstLR, std::abs(buffer.getSample(0, i) - buffer.getSample(1, i)));
+        }
+        if (pass == 0) check(worstLR > 0.01f, "chorus spread 1.0 must make left and right differ");
+        else           check(worstLR < 1.0e-6f, "chorus spread 0.0 must keep left and right equal");
+    }
+
+    // --- Scenario: Chorus mix at zero is dry ---
+    {
+        wvzz::modules::ChorusDSP chorus("chor");
+        ModuleTestHost host(chorus);
+        host.set("chor_bypass", 0.0f);
+        host.set("chor_mix", 0.0f);
+        host.prepare(sampleRate, blockSize);
+        juce::AudioBuffer<float> buffer(2, blockSize), input(2, blockSize);
+        juce::Random rng(3);
+        float worst = 0.0f;
+        for (int b = 0; b < 10; ++b)
+        {
+            fillNoise(buffer, rng, 0.5f);
+            input.makeCopyOf(buffer);
+            host.run(buffer);
+            worst = std::max(worst, maxAbsDiff(buffer, input));
+        }
+        check(worst < 1.0e-6f, "chorus with mix 0 must output the input");
+    }
+
+    // --- Zero allocation (4 voices, feedback on) and prefixing ---
+    {
+        wvzz::modules::ChorusDSP chorus("slot2_chor");
+        ModuleTestHost host(chorus);
+        check(host.getAPVTS().getParameter("slot2_chor_mix") != nullptr && host.getAPVTS().getParameter("chor_mix") == nullptr,
+              "chorus parameter ids must use the instance prefix");
+        host.set("slot2_chor_bypass", 0.0f);
+        host.set("slot2_chor_voices", 3.0f);
+        host.set("slot2_chor_feedback", 0.5f);
+        host.prepare(sampleRate, blockSize);
+        juce::AudioBuffer<float> buffer(2, blockSize);
+        generateSineWave(buffer, sampleRate, 440.0f);
+        host.run(buffer);
+        g_allocationCount = 0;
+        g_trackingAllocations = true;
+        for (int b = 0; b < 1000; ++b)
+        {
+            generateSineWave(buffer, sampleRate, 440.0f); // fresh input each block; does not allocate
+            host.run(buffer);
+        }
+        g_trackingAllocations = false;
+        std::cout << "  -> heap allocations in 1,000 blocks: " << g_allocationCount << std::endl;
+        check(g_allocationCount == 0, "chorus must not allocate while processing");
+        check(allFinite(buffer, 8.0f), "chorus output must stay finite");
+    }
+
+    std::cout << "  -> PASS\n" << std::endl;
+}
+
+static void testPhaserModule()
+{
+    std::cout << "[Modulation 3/9] Phaser: moving notches, stability, stage count, zero allocation, prefix..." << std::endl;
+    const double sampleRate = 48000.0;
+    const int blockSize = 512;
+
+    auto runNoise = [&](int stagesIndex, float feedback, float amplitude, int blocks, juce::AudioBuffer<float>& lastOut, bool& stayedBounded) {
+        wvzz::modules::PhaserDSP phaser("phs");
+        ModuleTestHost host(phaser);
+        host.set("phs_bypass", 0.0f);
+        host.set("phs_mix", 0.5f);
+        host.set("phs_rate", 1.0f);
+        host.set("phs_stages", static_cast<float>(stagesIndex));
+        host.set("phs_feedback", feedback);
+        host.prepare(sampleRate, blockSize);
+        juce::Random rng(99);
+        stayedBounded = true;
+        float worstDiff = 0.0f;
+        juce::AudioBuffer<float> input(2, blockSize);
+        for (int b = 0; b < blocks; ++b)
+        {
+            fillNoise(lastOut, rng, amplitude);
+            input.makeCopyOf(lastOut);
+            host.run(lastOut);
+            stayedBounded = stayedBounded && allFinite(lastOut, 8.0f);
+            worstDiff = std::max(worstDiff, maxAbsDiff(lastOut, input));
+        }
+        return worstDiff;
+    };
+
+    // --- Scenario: Phaser creates moving notches (output differs from the input) ---
+    juce::AudioBuffer<float> out4(2, blockSize), out2(2, blockSize), out12(2, blockSize);
+    bool bounded = true;
+    const float diff = runNoise(1, 0.5f, 0.5f, 50, out4, bounded);
+    check(diff > 0.05f && bounded, "phaser output must differ from the input and stay bounded");
+
+    // --- Scenario: Phaser stays stable at maximum feedback (12 stages, full scale, 2 s) ---
+    for (float fb : { 0.95f, -0.95f })
+    {
+        juce::AudioBuffer<float> out(2, blockSize);
+        runNoise(4, fb, 1.0f, 190, out, bounded);
+        check(bounded, "phaser must stay finite and below 8.0 at +/-0.95 feedback with 12 stages");
+    }
+
+    // --- Scenario: Stage count changes the response ---
+    runNoise(0, 0.5f, 0.5f, 50, out2, bounded);
+    runNoise(4, 0.5f, 0.5f, 50, out12, bounded);
+    check(maxAbsDiff(out2, out12) > 0.01f, "2 stages and 12 stages must give different outputs");
+    check(wvzz::modules::PhaserDSP::stagesForIndex(0) == 2 && wvzz::modules::PhaserDSP::stagesForIndex(4) == 12,
+          "stage choice must map to 2..12 sections");
+
+    // --- Zero allocation and prefixing ---
+    {
+        wvzz::modules::PhaserDSP phaser("slot2_phs");
+        ModuleTestHost host(phaser);
+        check(host.getAPVTS().getParameter("slot2_phs_center") != nullptr && host.getAPVTS().getParameter("phs_center") == nullptr,
+              "phaser parameter ids must use the instance prefix");
+        host.set("slot2_phs_bypass", 0.0f);
+        host.set("slot2_phs_stages", 4.0f);
+        host.prepare(sampleRate, blockSize);
+        juce::AudioBuffer<float> buffer(2, blockSize);
+        generateSineWave(buffer, sampleRate, 440.0f);
+        host.run(buffer);
+        g_allocationCount = 0;
+        g_trackingAllocations = true;
+        for (int b = 0; b < 1000; ++b)
+        {
+            generateSineWave(buffer, sampleRate, 440.0f); // fresh input each block; does not allocate
+            host.run(buffer);
+        }
+        g_trackingAllocations = false;
+        std::cout << "  -> heap allocations in 1,000 blocks: " << g_allocationCount << std::endl;
+        check(g_allocationCount == 0, "phaser must not allocate while processing");
+    }
+
+    std::cout << "  -> PASS\n" << std::endl;
+}
+
+static void testTremoloModule()
+{
+    std::cout << "[Modulation 4/9] Tremolo: classic, harmonic, zero depth, stereo, zero allocation, prefix..." << std::endl;
+    const double sampleRate = 48000.0;
+    const int blockSize = 256;
+
+    // Collects the per-block RMS of left and right for a sine input.
+    auto envelope = [&](int mode, float depth, float stereo, float toneHz, std::vector<float>& left, std::vector<float>& right, float* worstDiff = nullptr) {
+        wvzz::modules::TremoloDSP tremolo("trem");
+        ModuleTestHost host(tremolo);
+        host.set("trem_bypass", 0.0f);
+        host.set("trem_rate", 2.0f);
+        host.set("trem_depth", depth);
+        host.set("trem_mode", static_cast<float>(mode));
+        host.set("trem_stereo", stereo);
+        host.set("trem_xover", 800.0f);
+        host.prepare(sampleRate, blockSize);
+        juce::AudioBuffer<float> buffer(2, blockSize), input(2, blockSize);
+        double phase = 0.0;
+        for (int b = 0; b < 400; ++b) // about 2.1 s = 4 LFO cycles
+        {
+            fillSineBlock(buffer, sampleRate, toneHz, phase, 0.5f);
+            input.makeCopyOf(buffer);
+            host.run(buffer);
+            left.push_back(calculateRms(buffer, 0));
+            right.push_back(calculateRms(buffer, 1));
+            if (worstDiff != nullptr)
+                *worstDiff = std::max(*worstDiff, maxAbsDiff(buffer, input));
+        }
+    };
+
+    // --- Scenario: Classic tremolo modulates the level between the input level and near silence ---
+    {
+        std::vector<float> l, r;
+        envelope(0, 1.0f, 0.0f, 1000.0f, l, r);
+        const float inputRms = 0.5f / std::sqrt(2.0f);
+        const float lo = *std::min_element(l.begin() + 20, l.end());
+        const float hi = *std::max_element(l.begin() + 20, l.end());
+        std::cout << "  -> classic depth 1.0: block RMS " << lo << " .. " << hi << " (input " << inputRms << ")" << std::endl;
+        check(hi > inputRms * 0.9f && hi < inputRms * 1.05f, "classic tremolo peak must be about the input level");
+        check(lo < inputRms * 0.1f, "classic tremolo at depth 1.0 must reach near silence");
+    }
+
+    // --- Scenario: Harmonic tremolo moves low and high bands in opposite phase ---
+    {
+        std::vector<float> lowL, lowR, highL, highR;
+        envelope(1, 1.0f, 0.0f, 100.0f, lowL, lowR);    // far below the 800 Hz crossover
+        envelope(1, 1.0f, 0.0f, 6000.0f, highL, highR); // far above it
+        const float c = correlation(lowL, highL);
+        std::cout << "  -> harmonic mode: low band vs high band level correlation " << c << std::endl;
+        check(c < -0.8f, "harmonic tremolo must move the low and high band in opposite phase");
+    }
+
+    // --- Scenario: Zero depth is transparent (within -80 dB) in both modes ---
+    for (int mode = 0; mode < 2; ++mode)
+    {
+        std::vector<float> l, r;
+        float worst = 0.0f;
+        envelope(mode, 0.0f, 0.0f, 1000.0f, l, r, &worst);
+        check(worst < 0.5f * 1.0e-4f, "tremolo with depth 0 must be transparent within -80 dB");
+    }
+
+    // --- Scenario: Full stereo offset pans the signal ---
+    {
+        std::vector<float> l, r;
+        envelope(0, 1.0f, 1.0f, 1000.0f, l, r);
+        const float c = correlation(l, r);
+        std::cout << "  -> stereo 1.0: left vs right level correlation " << c << std::endl;
+        check(c < -0.8f, "tremolo stereo 1.0 must make left loudest when right is quietest");
+    }
+
+    // --- Zero allocation and prefixing ---
+    {
+        wvzz::modules::TremoloDSP tremolo("slot2_trem");
+        ModuleTestHost host(tremolo);
+        check(host.getAPVTS().getParameter("slot2_trem_depth") != nullptr && host.getAPVTS().getParameter("trem_depth") == nullptr,
+              "tremolo parameter ids must use the instance prefix");
+        host.set("slot2_trem_bypass", 0.0f);
+        host.set("slot2_trem_mode", 1.0f);
+        host.set("slot2_trem_shape", 2.0f);
+        host.prepare(sampleRate, 512);
+        juce::AudioBuffer<float> buffer(2, 512);
+        generateSineWave(buffer, sampleRate, 440.0f);
+        host.run(buffer);
+        g_allocationCount = 0;
+        g_trackingAllocations = true;
+        for (int b = 0; b < 1000; ++b)
+        {
+            generateSineWave(buffer, sampleRate, 440.0f); // fresh input each block; does not allocate
+            host.run(buffer);
+        }
+        g_trackingAllocations = false;
+        std::cout << "  -> heap allocations in 1,000 blocks: " << g_allocationCount << std::endl;
+        check(g_allocationCount == 0, "tremolo must not allocate while processing");
+    }
+
+    std::cout << "  -> PASS\n" << std::endl;
+}
+
+static void setPluginParam(juce::AudioProcessorValueTreeState& apvts, const char* id, float value)
+{
+    auto* param = apvts.getParameter(id);
+    check(param != nullptr, id);
+    param->setValueNotifyingHost(param->convertTo0to1(value));
+}
+
+/** Every parameter back to its default: all four effects bypassed. */
+static void resetPluginToDefaults(juce::AudioProcessor& processor)
+{
+    for (auto* param : processor.getParameters())
+        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(param))
+            ranged->setValueNotifyingHost(ranged->getDefaultValue());
+}
+
+static void testWvZzModulationChain()
+{
+    std::cout << "[Modulation 5/9] Plugin chain: all bypassed, serial stacking, tail length..." << std::endl;
+    const double sampleRate = 48000.0;
+    const int blockSize = 512;
+    juce::MidiBuffer midi;
+
+    // --- Scenario: All effects bypassed -> output equals input ---
+    {
+        wvzz::WvZzModulationAudioProcessor processor;
+        resetPluginToDefaults(processor);
+        processor.prepareToPlay(sampleRate, blockSize);
+        juce::AudioBuffer<float> buffer(2, blockSize), input(2, blockSize);
+        juce::Random rng(5);
+        float worst = 0.0f;
+        for (int b = 0; b < 20; ++b)
+        {
+            fillNoise(buffer, rng, 0.5f);
+            input.makeCopyOf(buffer);
+            processor.processBlock(buffer, midi);
+            worst = std::max(worst, maxAbsDiff(buffer, input));
+        }
+        std::cout << "  -> all bypassed: max difference to input " << worst << std::endl;
+        check(worst < 1.0e-6f, "with all four effects bypassed the output must equal the input");
+    }
+
+    // --- Scenario: Effects stack in series (tremolo acts on the chorused signal) ---
+    {
+        auto render = [&](bool chorusOn, bool tremoloOn, std::vector<float>& levels, juce::AudioBuffer<float>& last) {
+            wvzz::WvZzModulationAudioProcessor processor;
+            resetPluginToDefaults(processor);
+            auto& apvts = processor.getAPVTS();
+            setPluginParam(apvts, "chor_bypass", chorusOn ? 0.0f : 1.0f);
+            setPluginParam(apvts, "trem_bypass", tremoloOn ? 0.0f : 1.0f);
+            setPluginParam(apvts, "trem_depth", 1.0f);
+            setPluginParam(apvts, "trem_rate", 2.0f);
+            processor.prepareToPlay(sampleRate, blockSize);
+            double phase = 0.0;
+            for (int b = 0; b < 100; ++b)
+            {
+                fillSineBlock(last, sampleRate, 440.0f, phase, 0.5f);
+                processor.processBlock(last, midi);
+                levels.push_back(calculateRms(last, 0));
+            }
+        };
+        std::vector<float> both, tremOnly, chorusOnly;
+        juce::AudioBuffer<float> outBoth(2, blockSize), outTrem(2, blockSize), outChorus(2, blockSize);
+        render(true, true, both, outBoth);
+        render(false, true, tremOnly, outTrem);
+        render(true, false, chorusOnly, outChorus);
+
+        check(*std::min_element(both.begin() + 20, both.end()) < 0.05f, "with chorus + tremolo the tremolo must still gate the level");
+        check(maxAbsDiff(outBoth, outTrem) > 0.005f, "chorus + tremolo must differ from tremolo alone");
+        check(maxAbsDiff(outBoth, outChorus) > 0.005f, "chorus + tremolo must differ from chorus alone");
+    }
+
+    // --- Tail length reporting ---
+    {
+        wvzz::WvZzModulationAudioProcessor processor;
+        check(std::abs(processor.getTailLengthSeconds() - 2.0) < 1.0e-9, "WvZz Modulation must report a 2.0 s tail");
+        check(processor.getName() == "WvZz Modulation", "plugin name");
+    }
+
+    std::cout << "  -> PASS\n" << std::endl;
+}
+
+static void testWvZzModulationZeroAllocations()
+{
+    std::cout << "[Modulation 6/9] Plugin zero-allocation audit (all four effects active)..." << std::endl;
+
+    wvzz::WvZzModulationAudioProcessor processor;
+    processor.setCurrentProgram(9); // "Psychedelic Swirl": chorus, phaser, flanger, tremolo all on
+    processor.prepareToPlay(48000.0, 512);
+
+    juce::AudioBuffer<float> buffer(2, 512);
+    juce::MidiBuffer midi;
+    generateSineWave(buffer, 48000.0, 440.0f);
+    processor.processBlock(buffer, midi);
+
+    g_allocationCount = 0;
+    g_trackingAllocations = true;
+    for (int i = 0; i < 1000; ++i)
+        processor.processBlock(buffer, midi);
+    g_trackingAllocations = false;
+
+    std::cout << "  -> heap allocations in 1,000 processBlock() calls: " << g_allocationCount << std::endl;
+    check(g_allocationCount == 0, "WvZz Modulation must not allocate on the audio thread");
+    std::cout << "  -> PASS\n" << std::endl;
+}
+
+static void testWvZzModulationPresets()
+{
+    std::cout << "[Modulation 7/9] Factory presets: recall, stability, independence from history..." << std::endl;
+
+    wvzz::WvZzModulationAudioProcessor processor;
+    processor.prepareToPlay(48000.0, 512);
+
+    const auto& presets = wvzz::modulationfx::getFactoryPresets();
+    check(presets.size() == 10, "WvZz Modulation must have 10 factory presets");
+    check(processor.getNumPrograms() == 10, "getNumPrograms must be 10");
+    check(processor.getCurrentProgram() == 0, "the plugin must start on program 0");
+
+    juce::AudioBuffer<float> buffer(2, 512);
+    juce::MidiBuffer midi;
+
+    for (int i = 0; i < 10; ++i)
+    {
+        processor.setCurrentProgram(i);
+        check(processor.getProgramName(i) == juce::String(presets[static_cast<size_t>(i)].name), "preset name mismatch");
+
+        // Every id in the preset must be a real parameter, and must hold the preset value after loading
+        for (const auto& [paramId, value] : presets[static_cast<size_t>(i)].values)
+        {
+            auto* param = dynamic_cast<juce::RangedAudioParameter*>(processor.getAPVTS().getParameter(paramId));
+            check(param != nullptr, paramId);
+            const float actual = param->convertFrom0to1(param->getValue());
+            if (std::abs(actual - value) > 0.02f * std::max(1.0f, std::abs(value)))
+            {
+                std::cerr << "FAIL: preset '" << presets[static_cast<size_t>(i)].name << "' " << paramId
+                          << " = " << actual << ", expected " << value << std::endl;
+                std::exit(1);
+            }
+        }
+
+        for (int b = 0; b < 50; ++b)
+        {
+            generateSineWave(buffer, 48000.0, 220.0f);
+            processor.processBlock(buffer, midi);
+            check(allFinite(buffer, 8.0f), "preset output must be finite");
+        }
+    }
+
+    // --- Scenario: Preset result is independent of history ---
+    auto snapshot = [&processor]() {
+        std::vector<float> values;
+        for (auto* param : processor.getParameters())
+            values.push_back(param->getValue());
+        return values;
+    };
+    processor.setCurrentProgram(0);
+    const auto direct = snapshot();
+    processor.setCurrentProgram(9); // sets all four effects
+    processor.setCurrentProgram(0);
+    const auto afterOther = snapshot();
+    check(direct == afterOther, "loading a preset must give the same parameter values whatever was loaded before");
+
+    std::cout << "  -> PASS: 10 presets recalled, stable, and independent of history.\n" << std::endl;
+}
+
+static void testWvZzModulationTargets()
+{
+    std::cout << "[Modulation 8/9] Modulation profile: target lists and LFO delivery to Chorus Mix..." << std::endl;
+
+    // --- Scenario: Existing profiles are unchanged ---
+    const auto& distNames = wvzz::modules::getModTargetNames(wvzz::ModProfile::Distortion);
+    const auto& dynNames  = wvzz::modules::getModTargetNames(wvzz::ModProfile::Dynamics);
+    const auto& modNames  = wvzz::modules::getModTargetNames(wvzz::ModProfile::Modulation);
+    check(distNames.size() == 22 && distNames[14] == "Flanger Rate" && distNames[21] == "Master Vol", "Distortion target list changed");
+    check(dynNames.size() == 16 && dynNames[1] == "Sub X-Over" && dynNames[15] == "Master Vol", "Dynamics target list changed");
+    check(static_cast<int>(wvzz::ModTarget::MasterVol) == 21 && static_cast<int>(wvzz::ModTarget::DynClipDrive) == 33,
+          "existing ModTarget values must not move");
+    check(modNames.size() == 15, "Modulation profile must list None + 14 targets");
+    check(wvzz::modules::getModTargetForIndex(3, wvzz::ModProfile::Modulation) == wvzz::ModTarget::ModChorMix, "index 3 must be Chorus Mix");
+    check(wvzz::modules::getModTargetForIndex(8, wvzz::ModProfile::Modulation) == wvzz::ModTarget::FlangerRate, "index 8 must be Flanger Rate");
+    check(wvzz::modules::getModTargetForIndex(14, wvzz::ModProfile::Modulation) == wvzz::ModTarget::MasterVol, "index 14 must be Master Vol");
+
+    // --- Scenario: LFO moves a chorus parameter ---
+    wvzz::WvZzModulationAudioProcessor processor;
+    auto& apvts = processor.getAPVTS();
+    setPluginParam(apvts, "lfo1_target", 3.0f); // Chorus Mix
+    setPluginParam(apvts, "lfo1_depth", 1.0f);
+    setPluginParam(apvts, "lfo1_rate", 5.0f);
+    processor.prepareToPlay(44100.0, 512);
+
+    juce::AudioBuffer<float> buffer(2, 512);
+    buffer.clear();
+    juce::MidiBuffer midi;
+    bool sawOffset = false;
+    for (int b = 0; b < 10; ++b)
+    {
+        processor.processBlock(buffer, midi);
+        if (std::abs(processor.getModulationModule().getModulationDSP().getOffset(wvzz::ModTarget::ModChorMix)) > 0.01f)
+            sawOffset = true;
+    }
+    check(sawOffset, "LFO 1 must deliver a non-zero offset to the Chorus Mix target");
+
+    std::cout << "  -> PASS\n" << std::endl;
+}
+
+static void testWvZzModulationEditorAndScope()
+{
+    std::cout << "[Modulation 9/9] Editor at 1080x680, custom tab, LFO taps, Distortion/Dynamics layout unchanged..." << std::endl;
+
+    wvzz::WvZzModulationAudioProcessor processor;
+    processor.setCurrentProgram(9);
+    processor.prepareToPlay(48000.0, 512);
+
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    check(editor != nullptr, "createEditor() returned null for WvZz Modulation");
+    editor->setSize(1080, 680);
+    check(editor->getWidth() == 1080 && editor->getHeight() == 680, "WvZz Modulation editor must be 1080x680");
+
+    // The custom display exists exactly once in the Modulation editor, and not in the other plugins.
+    std::function<int(juce::Component&)> countScopes = [&countScopes](juce::Component& c) {
+        int n = (dynamic_cast<wvzz::ui::LfoPhaseScopeComponent*>(&c) != nullptr) ? 1 : 0;
+        for (auto* child : c.getChildren())
+            n += countScopes(*child);
+        return n;
+    };
+    check(countScopes(*editor) == 1, "WvZz Modulation editor must contain one LFO phase scope");
+
+    wvzz::WvZzDistortionAudioProcessor distortion;
+    std::unique_ptr<juce::AudioProcessorEditor> distEditor(distortion.createEditor());
+    wvzz::WvZzDynamicsAudioProcessor dynamics;
+    std::unique_ptr<juce::AudioProcessorEditor> dynEditor(dynamics.createEditor());
+    check(distEditor != nullptr && dynEditor != nullptr, "Distortion and Dynamics editors must still open");
+    check(countScopes(*distEditor) == 0 && countScopes(*dynEditor) == 0, "other plugins must not get a custom display tab");
+
+    // The audio thread publishes LFO state for the scope: active flags and a moving phase.
+    juce::AudioBuffer<float> buffer(2, 512);
+    juce::MidiBuffer midi;
+    generateSineWave(buffer, 48000.0, 440.0f);
+    processor.processBlock(buffer, midi);
+    const auto& tremTap = processor.getTremoloModule().getTremoloDSP().getLfoTap();
+    const float phaseBefore = tremTap.phase.load();
+    for (int b = 0; b < 4; ++b)
+        processor.processBlock(buffer, midi);
+    check(tremTap.active.load() && processor.getChorusModule().getChorusDSP().getLfoTap().active.load()
+          && processor.getPhaserModule().getPhaserDSP().getLfoTap().active.load()
+          && processor.getFlangerModule().getFlangerDSP().getLfoTap().active.load(),
+          "all four LFO taps must be active when the effects are on");
+    check(std::abs(tremTap.phase.load() - phaseBefore) > 1.0e-4f, "the tremolo LFO phase published for the scope must move");
+
+    setPluginParam(processor.getAPVTS(), "trem_bypass", 1.0f);
+    processor.processBlock(buffer, midi);
+    check(!tremTap.active.load(), "a bypassed effect must publish an inactive LFO tap");
+
+    check(std::abs(wvzz::ui::LfoPhaseScopeComponent::waveformValue(wvzz::dsp::LfoPhaseTap::Sine, 0.25f) - 1.0f) < 1.0e-5f
+          && wvzz::ui::LfoPhaseScopeComponent::waveformValue(wvzz::dsp::LfoPhaseTap::Square, 0.75f) == -1.0f
+          && std::abs(wvzz::ui::LfoPhaseScopeComponent::waveformValue(wvzz::dsp::LfoPhaseTap::Triangle, 0.5f) - 1.0f) < 1.0e-5f,
+          "scope waveform shapes");
+
+    std::cout << "  -> PASS\n" << std::endl;
+}
+
 int main(int, char*[])
 {
     std::cout << "=====================================================" << std::endl;
@@ -1226,8 +2111,19 @@ int main(int, char*[])
         testWvZzDynamicsDSPMath();
         testWvZzDynamicsEditorLayoutAndNonOverlap();
 
+        // Modulation suites
+        testFlangerExtension();
+        testChorusModule();
+        testPhaserModule();
+        testTremoloModule();
+        testWvZzModulationChain();
+        testWvZzModulationZeroAllocations();
+        testWvZzModulationPresets();
+        testWvZzModulationTargets();
+        testWvZzModulationEditorAndScope();
+
         std::cout << "=====================================================" << std::endl;
-        std::cout << "   ALL 19 DSP SUITES PASSED (100% SUCCESS)           " << std::endl;
+        std::cout << "   ALL 28 DSP SUITES PASSED (100% SUCCESS)           " << std::endl;
         std::cout << "=====================================================" << std::endl;
         return 0;
     }

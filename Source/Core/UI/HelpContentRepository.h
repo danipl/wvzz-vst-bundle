@@ -78,13 +78,71 @@ private:
 
         topics["flanger"] = {
             "Flanger (Stereo Quadrature Modulated Delay)",
-            "Dual modulated comb filter with 90-degree stereo quadrature phase offset and bipolar feedback.",
-            "Stage 4: Stereo Space & Movement",
+            "A short delay that sweeps up and down. Mixed with the dry signal it makes a moving comb filter.",
+            "Stereo Space & Movement",
             {
-                "Rate: Modulation frequency (0.05 to 5.0 Hz).",
-                "Amount: Modulation depth and wet/dry mix (0.0 to 1.0).",
-                "Feedback: Bipolar feedback producing rich metallic jet flanging.",
-                "Bypass: Completely bypasses the flanger stage."
+                "Rate: Sweep speed (0.01 to 20 Hz).",
+                "Amount: Wet/dry mix (0.0 to 1.0).",
+                "Feedback: Sends the delayed signal back in (-0.95 to 0.95). Negative values invert it. WvZz Modulation only.",
+                "Depth: How far the delay sweeps around the center (0 to 5 ms). WvZz Modulation only.",
+                "Center: The middle delay time (0.5 to 10 ms). WvZz Modulation only.",
+                "Thru-Zero: Delays the dry signal by Center, so the sweep passes through zero delay. WvZz Modulation only.",
+                "Bypass: Turns the flanger off."
+            }
+        };
+
+        topics["chorus"] = {
+            "Chorus (Multi-Voice Modulated Delay)",
+            "Up to 4 delayed copies of the signal, each moving slightly in pitch and time. It makes one sound feel like several.",
+            "Stage 1: Width & Thickness",
+            {
+                "Rate: Speed of the pitch movement (0.05 to 10 Hz).",
+                "Depth: How far each voice moves (up to +/- 5 ms).",
+                "Delay: Base delay of the voices (2 to 30 ms). Short is tight, long is wide.",
+                "Spread: Left/right difference of the movement. 0 is mono.",
+                "Feedback: Sends one voice back in for a resonant tone (0 to 0.7).",
+                "Mix: Wet/dry balance.",
+                "Voices: Number of delayed copies (1 to 4)."
+            }
+        };
+
+        topics["phaser"] = {
+            "Phaser (All-Pass Cascade)",
+            "A chain of all-pass filters creates notches in the spectrum. An LFO moves the notches up and down.",
+            "Stage 2: Sweeping Notches",
+            {
+                "Rate: Sweep speed (0.02 to 10 Hz).",
+                "Depth: Sweep range around the center (up to +/- 2 octaves).",
+                "Center: Middle frequency of the sweep (100 to 4000 Hz).",
+                "Feedback: Makes the notches sharper (-0.95 to 0.95). Negative values change the tone.",
+                "Stereo: LFO offset between left and right. 1.0 is 180 degrees.",
+                "Mix: Wet/dry balance. 0.5 gives the deepest notches.",
+                "Stages: Number of all-pass filters (2 to 12). More stages give more notches."
+            }
+        };
+
+        topics["tremolo"] = {
+            "Tremolo (Classic & Harmonic)",
+            "Moves the volume up and down with an LFO. Harmonic mode moves lows and highs in opposite directions.",
+            "Stage 4: Level Movement",
+            {
+                "Rate: Speed of the movement (0.1 to 20 Hz).",
+                "Depth: How far the level drops (0 is off).",
+                "Stereo: LFO offset between left and right. 1.0 turns the tremolo into an auto-pan.",
+                "X-Over: Split frequency for Harmonic mode (200 to 2000 Hz).",
+                "Shape: Sine, Triangle, or Square LFO.",
+                "Mode: Classic changes the whole level. Harmonic alternates the low and high band."
+            }
+        };
+
+        topics["lfo_phase_scope"] = {
+            "LFO Phase Scope",
+            "Shows where each effect LFO is in its cycle. The filled dot is the left channel, the ring is the right channel.",
+            "Center Column: SCOPE tab",
+            {
+                "One lane per effect: Chorus, Phaser, Flanger, Tremolo.",
+                "A dimmed lane means the effect is bypassed.",
+                "The height of the curve follows the effect depth."
             }
         };
 

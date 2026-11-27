@@ -4,9 +4,11 @@ namespace wvzz::modules {
 
 FlangerView::FlangerView(juce::AudioProcessorValueTreeState& apvts,
                          const juce::String& prefix,
-                         ui::IHelpOverlayHost* helpHost)
+                         ui::IHelpOverlayHost* helpHost,
+                         bool extendedControls)
     : apvtsState(apvts),
       instancePrefix(prefix),
+      extended(extendedControls),
       card("FLANGER", ui::WvZzLookAndFeel::electricViolet)
 {
     addAndMakeVisible(card);
@@ -35,6 +37,24 @@ FlangerView::FlangerView(juce::AudioProcessorValueTreeState& apvts,
     // Rotary Knobs: Rate, Amount
     initRotary(rateKnob,   paramId("rate"),   "Rate",   ui::WvZzLookAndFeel::electricViolet);
     initRotary(amountKnob, paramId("amount"), "Amount", ui::WvZzLookAndFeel::electricViolet);
+
+    if (extended)
+    {
+        initRotary(feedbackKnob, paramId("feedback"), "Feedback", ui::WvZzLookAndFeel::electricViolet);
+        feedbackKnob.slider.getProperties().set("isBipolar", true);
+        initRotary(depthKnob,  paramId("depth"),  "Depth",  ui::WvZzLookAndFeel::electricViolet);
+        initRotary(centerKnob, paramId("center"), "Center", ui::WvZzLookAndFeel::electricViolet);
+
+        tzeroToggle.button.setButtonText("THRU-ZERO");
+        tzeroToggle.button.getProperties().set("isPill", true);
+        tzeroToggle.button.getProperties().set("accentColor", static_cast<int>(ui::WvZzLookAndFeel::electricViolet.getARGB()));
+        tzeroToggle.attachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+            apvtsState, paramId("tzero"), tzeroToggle.button);
+        addAndMakeVisible(tzeroToggle.button);
+
+        // Follow preset and host changes too, not only clicks
+        bypassToggle.button.onStateChange = [this] { card.setBypassed(bypassToggle.button.getToggleState()); };
+    }
 }
 
 void FlangerView::initRotary(RotaryControl& rc, const juce::String& paramId, const juce::String& labelText, juce::Colour accent)
@@ -74,6 +94,21 @@ void FlangerView::resized()
         rc.label.setBounds(knobArea.removeFromBottom(labelH));
         rc.slider.setBounds(knobArea);
     };
+
+    if (extended)
+    {
+        // Row 1: Rate, Amount, Feedback. Row 2: Depth, Center, Through-Zero toggle.
+        auto topRow = content.removeFromTop(content.getHeight() / 2);
+        const int knobW = content.getWidth() / 3;
+        layoutKnob(rateKnob,     topRow.removeFromLeft(knobW));
+        layoutKnob(amountKnob,   topRow.removeFromLeft(knobW));
+        layoutKnob(feedbackKnob, topRow);
+
+        layoutKnob(depthKnob,  content.removeFromLeft(knobW));
+        layoutKnob(centerKnob, content.removeFromLeft(knobW));
+        tzeroToggle.button.setBounds(content.withSizeKeepingCentre(juce::jmin(92, content.getWidth() - 6), 22));
+        return;
+    }
 
     layoutKnob(rateKnob, content.removeFromLeft(content.getWidth() / 2));
     layoutKnob(amountKnob, content);

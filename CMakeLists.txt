@@ -30,6 +30,7 @@ add_library(WvZzModules STATIC
     Source/Core/Interfaces/IModuleView.h
     Source/Core/Interfaces/IPluginModule.h
     Source/Core/DSP/AudioVisualizerSource.h
+    Source/Core/DSP/LfoPhaseTap.h
 
     # Core UI
     Source/Core/UI/WvZzLookAndFeel.h
@@ -45,6 +46,9 @@ add_library(WvZzModules STATIC
     Source/Core/UI/StereoVUMeterComponent.h
     Source/Core/UI/SignalComparisonComponent.h
     Source/Core/UI/SignalComparisonComponent.cpp
+    Source/Core/UI/ModuleViewControls.h
+    Source/Core/UI/LfoPhaseScopeComponent.h
+    Source/Core/UI/LfoPhaseScopeComponent.cpp
 
     # Audio Modules
     Source/Modules/DynDetector/DynDetectorDSP.h
@@ -100,6 +104,24 @@ add_library(WvZzModules STATIC
     Source/Modules/Flanger/FlangerView.h
     Source/Modules/Flanger/FlangerView.cpp
     Source/Modules/Flanger/FlangerModule.h
+
+    Source/Modules/Chorus/ChorusDSP.h
+    Source/Modules/Chorus/ChorusDSP.cpp
+    Source/Modules/Chorus/ChorusView.h
+    Source/Modules/Chorus/ChorusView.cpp
+    Source/Modules/Chorus/ChorusModule.h
+
+    Source/Modules/Phaser/PhaserDSP.h
+    Source/Modules/Phaser/PhaserDSP.cpp
+    Source/Modules/Phaser/PhaserView.h
+    Source/Modules/Phaser/PhaserView.cpp
+    Source/Modules/Phaser/PhaserModule.h
+
+    Source/Modules/Tremolo/TremoloDSP.h
+    Source/Modules/Tremolo/TremoloDSP.cpp
+    Source/Modules/Tremolo/TremoloView.h
+    Source/Modules/Tremolo/TremoloView.cpp
+    Source/Modules/Tremolo/TremoloModule.h
 
     Source/Modules/MagicEQ/MagicEQDSP.h
     Source/Modules/MagicEQ/MagicEQDSP.cpp
@@ -219,6 +241,7 @@ endfunction()
 
 wvzz_add_plugin(WvZzDistortion WzDs "WvZz Distortion")
 wvzz_add_plugin(WvZzDynamics   WzDy "WvZz Dynamics")
+wvzz_add_plugin(WvZzModulation WzMd "WvZz Modulation")
 
 # ==============================================================================
 # Headless DSP Test Target: wvzz_dsp_tests
@@ -229,6 +252,8 @@ add_executable(wvzz_dsp_tests
     Plugins/WvZzDistortion/PluginEditor.cpp
     Plugins/WvZzDynamics/PluginProcessor.cpp
     Plugins/WvZzDynamics/PluginEditor.cpp
+    Plugins/WvZzModulation/PluginProcessor.cpp
+    Plugins/WvZzModulation/PluginEditor.cpp
 )
 
 target_compile_features(wvzz_dsp_tests PRIVATE cxx_std_20)

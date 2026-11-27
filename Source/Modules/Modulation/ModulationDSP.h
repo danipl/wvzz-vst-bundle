@@ -79,7 +79,31 @@ inline const juce::StringArray& getModTargetNames(ModProfile profile = ModProfil
         "Master Vol"
     };
 
-    return (profile == ModProfile::Dynamics) ? dynNames : distNames;
+    static const juce::StringArray modFxNames {
+        "None",
+        "Chorus Rate",
+        "Chorus Depth",
+        "Chorus Mix",
+        "Phaser Rate",
+        "Phaser Center",
+        "Phaser Feedback",
+        "Phaser Mix",
+        "Flanger Rate",
+        "Flanger Amount",
+        "Tremolo Rate",
+        "Tremolo Depth",
+        "Master Mix",
+        "LFO 2 Rate",
+        "Master Vol"
+    };
+
+    switch (profile)
+    {
+        case ModProfile::Dynamics:   return dynNames;
+        case ModProfile::Modulation: return modFxNames;
+        case ModProfile::Distortion: break;
+    }
+    return distNames;
 }
 
 inline ModTarget getModTargetForIndex(int index, ModProfile profile = ModProfile::Distortion)
@@ -89,6 +113,20 @@ inline ModTarget getModTargetForIndex(int index, ModProfile profile = ModProfile
         if (index >= 0 && index <= 21)
             return static_cast<ModTarget>(index);
         return ModTarget::None;
+    }
+
+    if (profile == ModProfile::Modulation)
+    {
+        static constexpr ModTarget map[] = {
+            ModTarget::None,
+            ModTarget::ModChorRate, ModTarget::ModChorDepth, ModTarget::ModChorMix,
+            ModTarget::ModPhsRate, ModTarget::ModPhsCenter, ModTarget::ModPhsFeedback, ModTarget::ModPhsMix,
+            ModTarget::FlangerRate, ModTarget::FlangerAmount,
+            ModTarget::ModTremRate, ModTarget::ModTremDepth,
+            ModTarget::MasterMix, ModTarget::LFO2Rate, ModTarget::MasterVol
+        };
+        constexpr int mapSize = static_cast<int>(sizeof(map) / sizeof(map[0]));
+        return (index >= 0 && index < mapSize) ? map[index] : ModTarget::None;
     }
 
     // Dynamics Profile mapping:
@@ -120,7 +158,7 @@ inline ModTarget getModTargetForIndex(int index, ModProfile profile = ModProfile
 class ModulationDSP : public IDSPModule
 {
 public:
-    static constexpr int numTargets = 34;
+    static constexpr int numTargets = static_cast<int>(ModTarget::NumTargets);
 
     explicit ModulationDSP(juce::String prefix = "mod", ModProfile profile = ModProfile::Distortion);
     ~ModulationDSP() override = default;
