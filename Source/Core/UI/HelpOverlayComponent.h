@@ -123,7 +123,7 @@ public:
             auto tagArea = contentArea.removeFromTop(18.0f);
             auto tagFont = juce::FontOptions(10.0f, juce::Font::bold);
             g.setFont(tagFont);
-            const float textW = juce::Font(tagFont).getStringWidthFloat(currentTopic.signalRole) + 16.0f;
+            const float textW = juce::GlyphArrangement::getStringWidth(juce::Font(tagFont), currentTopic.signalRole) + 16.0f;
             g.setColour(WvZzLookAndFeel::neonAmber.withAlpha(0.15f));
             g.fillRoundedRectangle(tagArea.withWidth(textW), 3.0f);
             g.setColour(WvZzLookAndFeel::neonAmber);

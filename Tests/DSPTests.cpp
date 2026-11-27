@@ -3695,7 +3695,8 @@ static void testBundleHasFivePlugins()
     {
         names.addIfNotAlreadyThere(plugin->getName());
         plugin->prepareToPlay(48000.0, 512);
-        std::unique_ptr<juce::AudioProcessorEditor> editor(plugin->createEditor());
+        // Through the base class the host entry point is createEditorIfNeeded() (createEditor() is not public there)
+        std::unique_ptr<juce::AudioProcessorEditor> editor(plugin->createEditorIfNeeded());
         check(editor != nullptr, "every plugin must open an editor");
         editor->setSize(1080, 680);
         check(editor->getWidth() == 1080 && editor->getHeight() == 680, "every editor must use the 1080x680 shell");
