@@ -348,7 +348,7 @@ Card title: `MASTER`. The BYPASS button is in the header bar.
 | In Gain | `input_gain` | -24 – +24 dB | 0 dB | Gain before the Early Reflections and the Reverb. It also changes the dry signal. |
 | Dry/Wet | `master_mix` | 0.0 – 1.0 | 1.0 | 0.0 is the dry signal only. 1.0 is the output of the Reverb only. |
 | Volume | `master_vol` | -36 – +12 dB | 0 dB | Output level. Applied before MONO and CLIP. |
-| MONO | `master_mono_bass` | On / Off | Off | Sums everything below 120 Hz to mono. |
+| MONO | `master_mono_bass` | On / Off | Off | Sums everything below 120 Hz to mono. It removes the left/right difference in the lows and leaves mono content unchanged. |
 | CLIP | `master_clip` | On / Off | On | Hard clip at 0 dBFS on the output. |
 | BYPASS (header) | `master_bypass` | On / Off | Off | Crossfades to the dry signal in 10 ms. |
 

@@ -243,6 +243,8 @@ bool WvZzModulationAudioProcessor::hasEditor() const { return true; }
 void WvZzModulationAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
 {
     auto state = apvts.copyState();
+    // Keep the selected factory preset with the state, so the preset box matches after a reload.
+    state.setProperty("currentProgram", currentProgramIndex, nullptr);
     std::unique_ptr<juce::XmlElement> xml(state.createXml());
     copyXmlToBinary(*xml, destData);
 }
@@ -251,7 +253,12 @@ void WvZzModulationAudioProcessor::setStateInformation(const void* data, int siz
 {
     std::unique_ptr<juce::XmlElement> xmlState(getXmlFromBinary(data, sizeInBytes));
     if (xmlState != nullptr && xmlState->hasTagName(apvts.state.getType()))
-        apvts.replaceState(juce::ValueTree::fromXml(*xmlState));
+    {
+        const auto state = juce::ValueTree::fromXml(*xmlState);
+        apvts.replaceState(state);
+        // Sessions saved before this property existed fall back to preset 0.
+        currentProgramIndex = juce::jlimit(0, getNumPrograms() - 1, static_cast<int>(state.getProperty("currentProgram", 0)));
+    }
 }
 
 } // namespace wvzz

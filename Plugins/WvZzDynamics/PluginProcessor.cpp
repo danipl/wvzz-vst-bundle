@@ -77,6 +77,14 @@ void WvZzDynamicsAudioProcessor::setCurrentProgram(int index)
     const auto& presets = dynamics::getFactoryPresets();
     const auto& p = presets[static_cast<size_t>(index)];
 
+    // Every parameter back to its default first, so values from the previous preset never stay
+    // (the presets list only the parameters they change).
+    for (auto* param : getParameters())
+    {
+        if (param != nullptr)
+            param->setValueNotifyingHost(param->getDefaultValue());
+    }
+
     for (const auto& [paramId, val] : p.values)
     {
         if (auto* param = apvts.getParameter(paramId))
@@ -265,12 +273,27 @@ void WvZzDynamicsAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, 
 void WvZzDynamicsAudioProcessor::randomizeParameters()
 {
     juce::Random rng;
-    detModule.getDSP().randomize(rng);
-    transModule.getDSP().randomize(rng);
-    ottModule.getDSP().randomize(rng);
-    compModule.getDSP().randomize(rng);
-    pumpModule.getDSP().randomize(rng);
-    clipModule.getDSP().randomize(rng);
+
+    // DICE sets the host parameters, so the knobs, the host, and the saved state all follow.
+    // Values are in real units, inside musically safe bounds. Bypass switches, modes, the
+    // sidechain listen switch, and the Master section are left alone.
+    struct Bounds { const char* id; float lo; float hi; };
+    static constexpr Bounds bounds[] = {
+        { "det_sub_xover", 60.0f, 140.0f },  { "det_sub_tight", 0.0f, 0.6f },   { "det_sc_hp", 40.0f, 200.0f },
+        { "trans_attack", -0.2f, 0.8f },     { "trans_sustain", -0.5f, 0.5f },
+        { "ott_depth", 0.1f, 0.7f },         { "ott_up_drive", 0.2f, 0.8f },    { "ott_down_drive", 0.2f, 0.8f },
+        { "ott_time", 0.5f, 1.5f },          { "ott_sheen", 0.0f, 6.0f },
+        { "comp_thresh", -30.0f, -8.0f },    { "comp_ratio", 2.0f, 8.0f },      { "comp_attack", 1.0f, 30.0f },
+        { "comp_release", 50.0f, 400.0f },   { "comp_knee", 0.0f, 9.0f },       { "comp_mix", 0.6f, 1.0f },
+        { "pump_amount", 0.0f, 0.7f },       { "pump_curve", 0.3f, 0.7f },
+        { "clip_drive", 0.0f, 8.0f },        { "clip_ceiling", -1.5f, -0.1f }
+    };
+
+    for (const auto& b : bounds)
+    {
+        if (auto* param = apvts.getParameter(b.id))
+            param->setValueNotifyingHost(param->convertTo0to1(b.lo + rng.nextFloat() * (b.hi - b.lo)));
+    }
 }
 
 juce::AudioProcessorEditor* WvZzDynamicsAudioProcessor::createEditor()
@@ -283,6 +306,8 @@ bool WvZzDynamicsAudioProcessor::hasEditor() const { return true; }
 void WvZzDynamicsAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
 {
     auto state = apvts.copyState();
+    // Keep the selected factory preset with the state, so the preset box matches after a reload.
+    state.setProperty("currentProgram", currentProgramIndex, nullptr);
     std::unique_ptr<juce::XmlElement> xml(state.createXml());
     copyXmlToBinary(*xml, destData);
 }
@@ -291,7 +316,12 @@ void WvZzDynamicsAudioProcessor::setStateInformation(const void* data, int sizeI
 {
     std::unique_ptr<juce::XmlElement> xmlState(getXmlFromBinary(data, sizeInBytes));
     if (xmlState != nullptr && xmlState->hasTagName(apvts.state.getType()))
-        apvts.replaceState(juce::ValueTree::fromXml(*xmlState));
+    {
+        const auto state = juce::ValueTree::fromXml(*xmlState);
+        apvts.replaceState(state);
+        // Sessions saved before this property existed fall back to preset 0.
+        currentProgramIndex = juce::jlimit(0, getNumPrograms() - 1, static_cast<int>(state.getProperty("currentProgram", 0)));
+    }
 }
 
 } // namespace wvzz

@@ -206,14 +206,18 @@ void MasterDSP::process(ProcessContext& ctx) noexcept
         sampleR *= linearGain;
 
         // 3. Sub-Bass Mono Maker (< 120 Hz)
+        // Work on mid/side: the mid (L+R) is left untouched, so mono content passes unchanged.
+        // The side (L-R) goes through a 24 dB/oct high-pass at 120 Hz, which removes the stereo
+        // difference in the lows. (Subtracting a low-passed copy per channel left about 70% of
+        // out-of-phase bass, because the low-pass shifts the phase.)
         if (monoBass && numChannels > 1)
         {
-            const float lowL = bassMonoSvfL.processSample(sampleL, gMono, kMono).lp;
-            const float lowR = bassMonoSvfR.processSample(sampleR, gMono, kMono).lp;
-            const float monoLow = 0.5f * (lowL + lowR);
+            const float mid  = 0.5f * (sampleL + sampleR);
+            const float side = 0.5f * (sampleL - sampleR);
+            const float sideHigh = bassMonoSvfR.processSample(bassMonoSvfL.processSample(side, gMono, kMono).hp, gMono, kMono).hp;
 
-            sampleL = (sampleL - lowL) + monoLow;
-            sampleR = (sampleR - lowR) + monoLow;
+            sampleL = mid + sideHigh;
+            sampleR = mid - sideHigh;
         }
 
         // 4. Output Clipper (0.0 dBFS safety ceiling)

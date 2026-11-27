@@ -218,7 +218,7 @@ Card title: `MAXIMIZER CLIPPER`. This module adds gain and then clips the peaks 
 - **Logo and subtitle**: shows `DYNAMICS  //  MULTIBAND & RHYTHMIC ENGINE`.
 - **Signal flow label**: shows `DET -> TRANS -> OTT -> COMP -> PUMP -> CLIP -> MASTER`.
 - **Preset Selector**: lists the 20 factory presets. The `<` and `>` buttons step through them.
-- **DICE**: sends a randomize request to the six processing modules. It does not touch Modulation or Master.
+- **DICE**: sets 20 knobs of the six processing modules to random values inside safe ranges. The knobs move, and the host sees the change. It does not touch bypass switches, modes, Modulation, or Master.
 - **BYPASS**: master bypass. See `master_bypass` in the [Master Section](#master-section).
 
 ---
@@ -276,7 +276,7 @@ Card title: `MASTER`. The BYPASS button is in the header bar.
 | In Gain | `input_gain` | -24 – +24 dB | 0 dB | Gain before all modules. It also changes the dry signal. |
 | Dry/Wet | `master_mix` | 0.0 – 1.0 | 1.0 | 0.0 is the dry signal only. 1.0 is the processed signal only. |
 | Volume | `master_vol` | -36 – +12 dB | 0 dB | Output level. Applied before MONO and CLIP. |
-| MONO | `master_mono_bass` | On / Off | Off | Sums everything below 120 Hz to mono. |
+| MONO | `master_mono_bass` | On / Off | Off | Sums everything below 120 Hz to mono. It removes the left/right difference in the lows and leaves mono content unchanged. |
 | CLIP | `master_clip` | On / Off | On | Hard clip at 0 dBFS on the output. |
 | BYPASS (header) | `master_bypass` | On / Off | Off | Crossfades to the dry signal in 10 ms. |
 
@@ -309,7 +309,7 @@ WvZz Dynamics has 20 factory presets.
 19. **Parallel Bus Slam**: parallel bus compression. 8:1 FET at 50% mix and 7 dB of hard clip.
 20. **Clean Mastering Glue**: mastering. 2:1 VCA, light OTT, and mild warm clipping.
 
-A preset sets only the parameters that it stores. All other parameters keep their current value. For example, no preset stores Compressor attack, release, or knee. Only `Tight Gate Percussion` stores the gate threshold.
+A preset first sets every parameter to its default value, then applies the values it stores. So the result does not depend on the preset you loaded before. For example, no preset stores Compressor attack, release, or knee, so these go back to their defaults. The selected preset is saved with your session.
 
 ---
 
@@ -373,7 +373,7 @@ The plugin reports no latency and no tail to the host.
 - **Use parallel settings.** Lower **Mix** on the Compressor or the Clipper to keep some of the original dynamics.
 - **Compare at equal loudness.** Use **Volume** to match the bypassed level, then toggle **BYPASS**.
 - **Pump only the lows.** Turn **SUB ONLY** on to duck the bass and keep the highs steady.
-- **Reset after a preset.** Presets do not store every parameter. Check **PHAT**, **Gate**, and the Pumper **Mode** after you switch.
+- **Start from a preset.** Loading a preset resets every control first, so you always get the same starting point.
 - **Leave headroom.** Master **CLIP** is on by default and cuts at 0 dBFS. Lower **Volume** if you need a lower peak level.
 
 ---
