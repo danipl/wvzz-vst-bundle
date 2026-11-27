@@ -108,6 +108,7 @@ private:
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> volSmoothed;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> bypassSmoothed;
 
+    // Two high-pass stages in series on the side (L-R) signal of the sub-bass mono maker
     CytomicSVF bassMonoSvfL;
     CytomicSVF bassMonoSvfR;
 

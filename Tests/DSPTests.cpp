@@ -38,6 +38,17 @@
 #include <vector>
 #include <cmath>
 #include <cassert>
+
+// The test binary is built in Release mode, where the standard assert() is compiled out (NDEBUG).
+// Replace it with a check that always runs, prints the failed condition, and ends the test run with exit code 1.
+#undef assert
+#define assert(condition) \
+    do { \
+        if (!(condition)) { \
+            std::cerr << "FAIL: " << #condition << "  (" << __FILE__ << ":" << __LINE__ << ")" << std::endl; \
+            std::exit(1); \
+        } \
+    } while (false)
 #include <cstdlib>
 #include <algorithm>
 #include <functional>
@@ -302,6 +313,9 @@ static void testBandRejectRecombination()
     wvzz::modules::BPFilterDSP bpFilter;
     juce::dsp::ProcessSpec spec { 48000.0, 512, 2 };
     bpFilter.prepare(spec);
+    // Without bound parameters the cutoffs start at 0 Hz and nothing passes.
+    // Set a 200 Hz .. 5 kHz band, so the 1 kHz test tone is inside the passband.
+    bpFilter.setCutoffs(200.0f, 5000.0f);
 
     juce::AudioBuffer<float> mainBuffer(2, 512);
     juce::AudioBuffer<float> scBuffer(2, 512);
@@ -726,32 +740,18 @@ static void testEdmHardstyleDspFeatures()
     wvzz::modules::MagicEQDSP meq;
     meq.prepare(spec);
     meq.setParameters(0.8f, 50.0f, true, false, true); // 50 Hz, pre-dist enabled
-    assert(meq.isPreDistortion() && "Magic EQ pre-distortion flag must be active");
-
-    // 3. Test Master Sub-Bass Mono Maker and 0 dBFS Clipper
-    wvzz::modules::MasterDSP master;
-    master.prepare(spec);
-    master.setParameters(0.0f, 1.0f, 0.0f, false, true, true); // clip = true, monoBass = true
-
-    juce::AudioBuffer<float> stereoBuf(2, 512);
-    // Left channel: 60 Hz sine, Right channel: inverted 60 Hz sine (out-of-phase stereo bass)
-    for (int i = 0; i < 512; ++i)
     {
-        const float s = std::sin(2.0 * juce::MathConstants<double>::pi * 60.0 * i / 48000.0);
-        stereoBuf.setSample(0, i, s);
-        stereoBuf.setSample(1, i, -s);
+        // The pre-distortion switch is a host parameter, so it needs a bound module: check it in the plugin.
+        wvzz::WvZzDistortionAudioProcessor host;
+        auto* preParam = host.getAPVTS().getParameter("meq_pre");
+        assert(preParam != nullptr && "meq_pre parameter must exist");
+        preParam->setValueNotifyingHost(1.0f);
+        assert(host.getMagicEQModule().getMagicEQDSP().isPreDistortion() && "Magic EQ pre-distortion flag must be active");
+        preParam->setValueNotifyingHost(0.0f);
+        assert(!host.getMagicEQModule().getMagicEQDSP().isPreDistortion() && "Magic EQ pre-distortion flag must be off again");
     }
 
-    wvzz::ProcessContext masterCtx {
-        stereoBuf, stereoBuf, dummyRej, dummyAux, nullptr, 0, 150.0, 0.0, false, 0
-    };
-
-    master.process(masterCtx);
-
-    // With monoBass active, out-of-phase 60 Hz should cancel out to near zero
-    const float lowRms = calculateRms(stereoBuf, 0);
-    std::cout << "  -> Mono Bass cancellation RMS of out-of-phase 60Hz: " << lowRms << std::endl;
-    assert(lowRms < 0.25f && "Sub-bass mono maker must cancel out-of-phase low end");
+    // 3. Master Sub-Bass Mono Maker: see testMasterMonoBass() (it needs a module with bound parameters).
 
     // 4. Test "Euphoric Supersaw Excite" stability at High Cut = 20 kHz (top) & zero preset leakage
     {
@@ -1437,6 +1437,74 @@ private:
     float fbL { 0.0f }, fbR { 0.0f };
     std::vector<float> bufL, bufR;
 };
+
+static void testMasterMonoBass()
+{
+    std::cout << "[Master] Sub-bass mono maker: out-of-phase lows cancel, mono and highs are kept..." << std::endl;
+    const double sampleRate = 48000.0;
+    const int blockSize = 512;
+
+    // Renders a stereo tone (right = left x rightSign) through the Master module, returns the RMS of the last 0.25 s.
+    auto render = [&](float hz, float rightSign, bool monoBass, float& rmsLeft, float& rmsRight, float& worstChange) {
+        wvzz::modules::MasterDSP master("master");
+        ModuleTestHost host(master);
+        host.set("master_mono_bass", monoBass ? 1.0f : 0.0f);
+        host.set("master_clip", 0.0f);
+        host.prepare(sampleRate, blockSize);
+
+        juce::AudioBuffer<float> buffer(2, blockSize);
+        double phase = 0.0;
+        double sumL = 0.0, sumR = 0.0;
+        int counted = 0;
+        worstChange = 0.0f;
+        for (int b = 0; b < 94; ++b) // 1 second
+        {
+            fillSineBlock(buffer, sampleRate, hz, phase, 0.5f);
+            buffer.applyGain(1, 0, blockSize, rightSign);
+            // The Master module takes its dry signal from the context's sidechain slot; the harness passes silence
+            // there, and the default mix of 1.0 means the output is the processed main buffer only.
+            juce::AudioBuffer<float> input(2, blockSize);
+            input.makeCopyOf(buffer);
+            host.run(buffer);
+            if (b >= 70)
+            {
+                for (int i = 0; i < blockSize; ++i)
+                {
+                    sumL += buffer.getSample(0, i) * buffer.getSample(0, i);
+                    sumR += buffer.getSample(1, i) * buffer.getSample(1, i);
+                    ++counted;
+                }
+                worstChange = std::max(worstChange, maxAbsDiff(buffer, input));
+            }
+        }
+        rmsLeft = static_cast<float>(std::sqrt(sumL / counted));
+        rmsRight = static_cast<float>(std::sqrt(sumR / counted));
+    };
+
+    const float inputRms = 0.5f / std::sqrt(2.0f);
+    float l = 0.0f, r = 0.0f, change = 0.0f;
+
+    // Out-of-phase 60 Hz: the stereo difference in the lows must be removed
+    render(60.0f, -1.0f, true, l, r, change);
+    std::cout << "  -> out-of-phase 60 Hz, mono bass on: RMS " << l << " (input " << inputRms << ")" << std::endl;
+    assert(l < inputRms * 0.15f && r < inputRms * 0.15f && "mono bass must cancel out-of-phase lows");
+
+    // The same signal with the switch off stays as it is
+    render(60.0f, -1.0f, false, l, r, change);
+    assert(change < 1.0e-6f && "with mono bass off the signal must not change");
+
+    // Mono (in-phase) lows pass unchanged
+    render(60.0f, 1.0f, true, l, r, change);
+    std::cout << "  -> in-phase 60 Hz, mono bass on: largest change " << change << std::endl;
+    assert(change < 1.0e-6f && "mono bass must not change mono content");
+
+    // Out-of-phase highs keep their width
+    render(2000.0f, -1.0f, true, l, r, change);
+    std::cout << "  -> out-of-phase 2 kHz, mono bass on: RMS " << l << std::endl;
+    assert(l > inputRms * 0.95f && r > inputRms * 0.95f && "mono bass must keep the stereo width above 120 Hz");
+
+    std::cout << "  -> PASS\n" << std::endl;
+}
 
 static void testFlangerExtension()
 {
@@ -3638,6 +3706,104 @@ static void testBundleHasFivePlugins()
     std::cout << "  -> PASS\n" << std::endl;
 }
 
+static void testPresetStateAndDice()
+{
+    std::cout << "[Presets] Selected preset saved with the state (all plugins); Dynamics presets and DICE..." << std::endl;
+
+    auto snapshot = [](juce::AudioProcessor& processor) {
+        std::vector<float> values;
+        for (auto* param : processor.getParameters())
+            values.push_back(param->getValue());
+        return values;
+    };
+
+    // --- Session recall restores the parameters and the selected preset in every plugin ---
+    std::vector<std::unique_ptr<juce::AudioProcessor>> plugins;
+    plugins.push_back(std::make_unique<wvzz::WvZzDistortionAudioProcessor>());
+    plugins.push_back(std::make_unique<wvzz::WvZzDynamicsAudioProcessor>());
+    plugins.push_back(std::make_unique<wvzz::WvZzModulationAudioProcessor>());
+    plugins.push_back(std::make_unique<wvzz::WvZzDelayAudioProcessor>());
+    plugins.push_back(std::make_unique<wvzz::WvZzReverbAudioProcessor>());
+    for (auto& plugin : plugins)
+    {
+        const int last = plugin->getNumPrograms() - 1;
+        plugin->setCurrentProgram(last);
+        juce::MemoryBlock saved;
+        plugin->getStateInformation(saved);
+        const auto savedValues = snapshot(*plugin);
+
+        plugin->setCurrentProgram(1);
+        plugin->setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
+        if (plugin->getCurrentProgram() != last || snapshot(*plugin) != savedValues)
+        {
+            std::cerr << "FAIL: " << plugin->getName() << " did not restore its preset index and parameters from saved state" << std::endl;
+            std::exit(1);
+        }
+    }
+    std::cout << "  -> 5 plugins restore the selected preset and all parameter values" << std::endl;
+
+    // --- WvZz Dynamics: a preset gives the same values whatever was loaded before ---
+    wvzz::WvZzDynamicsAudioProcessor dynamics;
+    dynamics.setCurrentProgram(0);
+    const auto direct = snapshot(dynamics);
+    dynamics.setCurrentProgram(1); // "Tok & Tail Kick Glue" turns comp_phat on; preset 0 does not list comp_phat
+    assert(dynamics.getAPVTS().getRawParameterValue("comp_phat")->load() > 0.5f && "preset 2 must turn comp_phat on");
+    dynamics.setCurrentProgram(0);
+    assert(dynamics.getAPVTS().getRawParameterValue("comp_phat")->load() < 0.5f && "comp_phat must not stay on after switching back");
+    assert(direct == snapshot(dynamics) && "a Dynamics preset must not depend on the preset loaded before");
+    for (int i = 0; i < dynamics.getNumPrograms(); ++i)
+    {
+        dynamics.setCurrentProgram(i);
+        const auto once = snapshot(dynamics);
+        dynamics.setCurrentProgram((i + 7) % dynamics.getNumPrograms());
+        dynamics.setCurrentProgram(i);
+        assert(once == snapshot(dynamics) && "every Dynamics preset must be independent of history");
+    }
+    std::cout << "  -> 20 Dynamics presets give the same values whatever was loaded before" << std::endl;
+
+    // --- WvZz Dynamics: DICE changes the host parameters, inside its bounds, and leaves switches alone ---
+    dynamics.setCurrentProgram(0);
+    auto& apvts = dynamics.getAPVTS();
+    const auto before = snapshot(dynamics);
+    const float bypassBefore = apvts.getRawParameterValue("comp_bypass")->load();
+    const float modeBefore = apvts.getRawParameterValue("comp_mode")->load();
+    const float volBefore = apvts.getRawParameterValue("master_vol")->load();
+    int changedRuns = 0;
+    for (int run = 0; run < 20; ++run)
+    {
+        dynamics.randomizeParameters();
+        if (snapshot(dynamics) != before)
+            ++changedRuns;
+        const float thresh = apvts.getRawParameterValue("comp_thresh")->load();
+        const float ratio = apvts.getRawParameterValue("comp_ratio")->load();
+        const float depth = apvts.getRawParameterValue("ott_depth")->load();
+        const float ceiling = apvts.getRawParameterValue("clip_ceiling")->load();
+        assert(thresh >= -30.1f && thresh <= -7.9f && "DICE comp_thresh bounds");
+        assert(ratio >= 1.9f && ratio <= 8.1f && "DICE comp_ratio bounds");
+        assert(depth >= 0.09f && depth <= 0.71f && "DICE ott_depth bounds");
+        assert(ceiling >= -1.6f && ceiling <= 0.0f && "DICE clip_ceiling bounds");
+    }
+    assert(changedRuns == 20 && "DICE must change the host parameters on every run");
+    assert(apvts.getRawParameterValue("comp_bypass")->load() == bypassBefore
+           && apvts.getRawParameterValue("comp_mode")->load() == modeBefore
+           && apvts.getRawParameterValue("master_vol")->load() == volBefore
+           && "DICE must not touch bypass switches, modes, or the master volume");
+    std::cout << "  -> Dynamics DICE moved the host parameters in 20 of 20 runs, inside its bounds" << std::endl;
+
+    // The randomized settings stay stable
+    dynamics.prepareToPlay(48000.0, 512);
+    juce::AudioBuffer<float> buffer(2, 512);
+    juce::MidiBuffer midi;
+    for (int b = 0; b < 50; ++b)
+    {
+        generateSineWave(buffer, 48000.0, 150.0f);
+        dynamics.processBlock(buffer, midi);
+        assert(allFinite(buffer, 8.0f) && "output after DICE must be finite");
+    }
+
+    std::cout << "  -> PASS\n" << std::endl;
+}
+
 int main(int, char*[])
 {
     std::cout << "=====================================================" << std::endl;
@@ -3668,6 +3834,9 @@ int main(int, char*[])
         testWvZzDynamicsDSPMath();
         testWvZzDynamicsEditorLayoutAndNonOverlap();
 
+        // Master (shared by all plugins)
+        testMasterMonoBass();
+
         // Modulation suites
         testFlangerExtension();
         testChorusModule();
@@ -3695,8 +3864,11 @@ int main(int, char*[])
         testWvZzReverbEditorAndDecayDisplay();
         testBundleHasFivePlugins();
 
+        // Presets, state, and DICE across the bundle
+        testPresetStateAndDice();
+
         std::cout << "=====================================================" << std::endl;
-        std::cout << "   ALL 40 DSP SUITES PASSED (100% SUCCESS)           " << std::endl;
+        std::cout << "   ALL 42 DSP SUITES PASSED (100% SUCCESS)           " << std::endl;
         std::cout << "=====================================================" << std::endl;
         return 0;
     }
