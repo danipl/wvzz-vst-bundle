@@ -2,8 +2,9 @@
 
 namespace wvzz::modules {
 
-ModulationDSP::ModulationDSP(juce::String prefix)
-    : instancePrefix(std::move(prefix))
+ModulationDSP::ModulationDSP(juce::String prefix, ModProfile profile)
+    : instancePrefix(std::move(prefix)),
+      modProfile(profile)
 {
     rng.seed(1337);
 }
@@ -11,6 +12,7 @@ ModulationDSP::ModulationDSP(juce::String prefix)
 void ModulationDSP::registerParameters(juce::AudioProcessorValueTreeState::ParameterLayout& layout)
 {
     auto lfoRateRange = juce::NormalisableRange<float>(0.02f, 30.0f, 0.01f, 0.35f);
+    const auto& targetNames = getModTargetNames(modProfile);
 
     // LFO 1
     layout.add(std::make_unique<juce::AudioParameterChoice>(
@@ -22,7 +24,7 @@ void ModulationDSP::registerParameters(juce::AudioProcessorValueTreeState::Param
     layout.add(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID{ "lfo1_sync_div", 1 }, "LFO 1 Sync Div", getLFOSyncDivNames(), 4)); // 1/4 default
     layout.add(std::make_unique<juce::AudioParameterChoice>(
-        juce::ParameterID{ "lfo1_target", 1 }, "LFO 1 Target", getModTargetNames(), 0));
+        juce::ParameterID{ "lfo1_target", 1 }, "LFO 1 Target", targetNames, 0));
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ "lfo1_depth", 1 }, "LFO 1 Depth", -1.0f, 1.0f, 0.0f));
 
@@ -36,7 +38,7 @@ void ModulationDSP::registerParameters(juce::AudioProcessorValueTreeState::Param
     layout.add(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID{ "lfo2_sync_div", 1 }, "LFO 2 Sync Div", getLFOSyncDivNames(), 4));
     layout.add(std::make_unique<juce::AudioParameterChoice>(
-        juce::ParameterID{ "lfo2_target", 1 }, "LFO 2 Target", getModTargetNames(), 0));
+        juce::ParameterID{ "lfo2_target", 1 }, "LFO 2 Target", targetNames, 0));
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ "lfo2_depth", 1 }, "LFO 2 Depth", -1.0f, 1.0f, 0.0f));
 
@@ -46,9 +48,9 @@ void ModulationDSP::registerParameters(juce::AudioProcessorValueTreeState::Param
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ "xy_y", 1 }, "X/Y Pad Y", 0.0f, 1.0f, 0.5f));
     layout.add(std::make_unique<juce::AudioParameterChoice>(
-        juce::ParameterID{ "xy_x_target", 1 }, "X Target", getModTargetNames(), 0));
+        juce::ParameterID{ "xy_x_target", 1 }, "X Target", targetNames, 0));
     layout.add(std::make_unique<juce::AudioParameterChoice>(
-        juce::ParameterID{ "xy_y_target", 1 }, "Y Target", getModTargetNames(), 0));
+        juce::ParameterID{ "xy_y_target", 1 }, "Y Target", targetNames, 0));
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ "xy_x_depth", 1 }, "X Depth", -1.0f, 1.0f, 0.0f));
     layout.add(std::make_unique<juce::AudioParameterFloat>(
@@ -169,7 +171,8 @@ void ModulationDSP::updateBlockControl(double bpm, int numSamples, double ppq, b
     const bool sync1     = (lfo1SyncParam != nullptr) && (lfo1SyncParam->load(std::memory_order_relaxed) > 0.5f);
     const float freeRate1= (lfo1RateParam != nullptr) ? lfo1RateParam->load(std::memory_order_relaxed) : 1.0f;
     const int syncDiv1   = (lfo1SyncDivParam != nullptr) ? static_cast<int>(lfo1SyncDivParam->load(std::memory_order_relaxed)) : 4;
-    const auto target1   = (lfo1TargetParam != nullptr) ? static_cast<ModTarget>(static_cast<int>(lfo1TargetParam->load(std::memory_order_relaxed))) : ModTarget::None;
+    const int target1Idx = (lfo1TargetParam != nullptr) ? static_cast<int>(lfo1TargetParam->load(std::memory_order_relaxed)) : 0;
+    const auto target1   = getModTargetForIndex(target1Idx, modProfile);
     const float depth1   = (lfo1DepthParam != nullptr) ? lfo1DepthParam->load(std::memory_order_relaxed) : 0.0f;
 
     if (sync1 && isPlaying)
@@ -192,7 +195,8 @@ void ModulationDSP::updateBlockControl(double bpm, int numSamples, double ppq, b
     const bool sync2     = (lfo2SyncParam != nullptr) && (lfo2SyncParam->load(std::memory_order_relaxed) > 0.5f);
     const float freeRate2= (lfo2RateParam != nullptr) ? lfo2RateParam->load(std::memory_order_relaxed) : 1.0f;
     const int syncDiv2   = (lfo2SyncDivParam != nullptr) ? static_cast<int>(lfo2SyncDivParam->load(std::memory_order_relaxed)) : 4;
-    const auto target2   = (lfo2TargetParam != nullptr) ? static_cast<ModTarget>(static_cast<int>(lfo2TargetParam->load(std::memory_order_relaxed))) : ModTarget::None;
+    const int target2Idx = (lfo2TargetParam != nullptr) ? static_cast<int>(lfo2TargetParam->load(std::memory_order_relaxed)) : 0;
+    const auto target2   = getModTargetForIndex(target2Idx, modProfile);
     const float depth2   = (lfo2DepthParam != nullptr) ? lfo2DepthParam->load(std::memory_order_relaxed) : 0.0f;
 
     if (sync2 && isPlaying && target1 != ModTarget::LFO2Rate)
@@ -219,8 +223,10 @@ void ModulationDSP::updateBlockControl(double bpm, int numSamples, double ppq, b
     // 3. Evaluate X/Y Pad offsets
     const float xyXVal = (xyXParam != nullptr) ? xyXParam->load(std::memory_order_relaxed) : 0.5f;
     const float xyYVal = (xyYParam != nullptr) ? xyYParam->load(std::memory_order_relaxed) : 0.5f;
-    const auto xyXTarget = (xyXTargetParam != nullptr) ? static_cast<ModTarget>(static_cast<int>(xyXTargetParam->load(std::memory_order_relaxed))) : ModTarget::None;
-    const auto xyYTarget = (xyYTargetParam != nullptr) ? static_cast<ModTarget>(static_cast<int>(xyYTargetParam->load(std::memory_order_relaxed))) : ModTarget::None;
+    const int xyXIdx = (xyXTargetParam != nullptr) ? static_cast<int>(xyXTargetParam->load(std::memory_order_relaxed)) : 0;
+    const int xyYIdx = (xyYTargetParam != nullptr) ? static_cast<int>(xyYTargetParam->load(std::memory_order_relaxed)) : 0;
+    const auto xyXTarget = getModTargetForIndex(xyXIdx, modProfile);
+    const auto xyYTarget = getModTargetForIndex(xyYIdx, modProfile);
     const float xyXDepth = (xyXDepthParam != nullptr) ? xyXDepthParam->load(std::memory_order_relaxed) : 0.0f;
     const float xyYDepth = (xyYDepthParam != nullptr) ? xyYDepthParam->load(std::memory_order_relaxed) : 0.0f;
 

@@ -19,7 +19,8 @@ public:
     ModulationView(juce::AudioProcessorValueTreeState& apvts,
                    ModulationDSP& dsp,
                    dsp::AudioVisualizerSource* visualizerSource,
-                   ui::IHelpOverlayHost* helpHost);
+                   ui::IHelpOverlayHost* helpHost,
+                   ModProfile profile = ModProfile::Distortion);
     ~ModulationView() override = default;
 
     void resized() override;

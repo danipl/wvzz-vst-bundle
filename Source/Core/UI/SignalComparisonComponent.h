@@ -22,7 +22,8 @@ public:
     {
         Oscilloscope = 0,
         Spectrum,
-        Delta
+        Delta,
+        GainReduction
     };
 
     explicit SignalComparisonComponent(dsp::AudioVisualizerSource& source);
@@ -46,6 +47,7 @@ private:
     void renderOscilloscope(juce::Graphics& g, juce::Rectangle<float> area);
     void renderSpectrum(juce::Graphics& g, juce::Rectangle<float> area);
     void renderDelta(juce::Graphics& g, juce::Rectangle<float> area);
+    void renderGainReduction(juce::Graphics& g, juce::Rectangle<float> area);
 
     void processFftData();
 
@@ -54,11 +56,13 @@ private:
     Mode currentMode { Mode::Oscilloscope };
     bool frozen { false };
     float gainScale { 1.0f };
+    float liveCrestFactorDb { 0.0f };
 
     // Header buttons
     juce::TextButton scopeButton { "SCOPE" };
     juce::TextButton spectrumButton { "SPECTRUM" };
     juce::TextButton deltaButton { "DELTA" };
+    juce::TextButton grButton { "GR" };
     juce::TextButton scaleButton { "1X" };
     juce::TextButton freezeButton { "FREEZE" };
 
@@ -66,10 +70,12 @@ private:
     static constexpr int waveformBufferSize = 2048;
     std::vector<float> inputWaveform;
     std::vector<float> outputWaveform;
+    std::vector<float> grWaveform;
     int writeIndex { 0 };
 
     // Temporary read scratch buffer
     std::vector<float> tempReadBuffer;
+    std::vector<float> tempGrBuffer;
 
     // FFT Engine (Order 10 = 1024 points)
     static constexpr int fftOrder = 10;

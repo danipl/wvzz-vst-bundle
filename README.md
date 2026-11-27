@@ -63,6 +63,20 @@ All plugins in the WvZz suite are built as native **macOS Universal Binaries** (
 
 <br/>
 
+### 2. 🎚️ WvZz Dynamics *(Available Now)*
+
+> **Multiband and Rhythmic Dynamics Processor**  
+> A fixed chain of six modules for electronic music: it shapes transients, compresses in three bands, glues a bus, ducks in time with the song, and clips the peaks.
+
+| Key Capabilities | Highlights | Documentation |
+| :--- | :--- | :--- |
+| **Sub Lock & Detector** | A 24 dB/oct Linkwitz-Riley crossover keeps the sub-bass out of the chain and adds it back after the Compressor. The detector can listen to an external sidechain. | 📖 **[Plugin Overview & DSP Guide](Plugins/WvZzDynamics/README.md)** |
+| **Transient Shaper & Gate** | Attack and sustain shaping that does not depend on input level, plus a noise gate placed before the OTT stage. | 🎛️ **[Producer User Manual](Plugins/WvZzDynamics/USER_MANUAL.md)** |
+| **3-Band OTT + Bus Compressor** | Upward and downward compression in three bands with a high-band sheen control, followed by an Opto / VCA / FET compressor. | 🧪 **[20 Factory Presets Included](Plugins/WvZzDynamics/USER_MANUAL.md#5-factory-presets)** |
+| **Rhythmic Pumper & Maximizer Clipper** | Tempo-synced or audio-triggered ducking with 4 shapes, then drive and peak clipping at a set ceiling. Two LFOs and an X/Y pad move 15 targets. | 🛠️ **[Source Code (`Plugins/WvZzDynamics`)](Plugins/WvZzDynamics)** |
+
+<br/>
+
 ### 🗺️ Bundle Roadmap & Upcoming Plugins
 
 Because every DSP block lives in our shared `WvZzModules` library, the bundle is actively expanding into a complete production suite:
@@ -70,10 +84,10 @@ Because every DSP block lives in our shared `WvZzModules` library, the bundle is
 | Plugin Target | Status | Focus & Sonic Character | Core Architecture |
 | :--- | :---: | :--- | :--- |
 | **🔥 WvZz Distortion** | ✅ **Released** | Multi-circuit saturation, ZDF band-splitting, 12-mode filtering & Phat compression | `BPFilter` + `Distortion` + `MMFilter` + `Flanger` + `MagicEQ` + `Compressor` |
+| **🎚️ WvZz Dynamics** | ✅ **Released** | Sub lock, transient shaper & gate, 3-band OTT, bus compressor, tempo-synced pumper & maximizer clipper | `DynDetector` + `TransientShaper` + `MultibandOTT` + `Compressor` + `RhythmicPumper` + `MaximizerClipper` |
 | **⏱️ WvZz Delay** | 🚧 *Planned* | Tape, analog BBD & granular stereo delay with ducking and filter diffusion | Fractional Lagrange delay lines, ZDF feedback filters, LFO/Env matrix |
 | **🌌 WvZz Reverb** | 🚧 *Planned* | Algorithmic plate, lush hall & non-linear shimmer spaces | Zero-allocation Feedback Delay Networks (FDN) & early reflection diffusers |
 | **🌊 WvZz Modulation** | 🚧 *Planned* | Dimensional multi-voice chorus, through-zero phaser, flanger & harmonic tremolo | Multi-phase quadrature oscillators & all-pass ZDF phaser cascades |
-| **🎚️ WvZz Dynamics** | 🚧 *Planned* | 3-band crossover compressor, transient shaper & master brickwall limiter | Linkwitz-Riley ZDF crossovers & multi-instance `CompressorModule` chains |
 
 ---
 

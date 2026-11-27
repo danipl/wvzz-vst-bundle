@@ -24,14 +24,14 @@ The system SHALL support both Free running rate (`0.02 Hz` to `30.0 Hz`) and Hos
 - **THEN** the LFO cycle frequency dynamically tracks the live host `bpm` (locked to `ppqPosition` when transport is playing) and falls back to free accumulation at `120.0 BPM` if host tempo is unavailable
 
 ### Requirement: 21-Target Modulation Routing Matrix
-The system SHALL allow LFO 1, LFO 2, and the X/Y Pad axes to modulate any parameter in the 22-item Modulatable Targets Enum (`None`, `BP Low Cut`, `BP High Cut`, `BP Both Cuts`, `BP Low Res`, `BP High Res`, `BP BR Mix`, `Dist Mech`, `Dist Tube`, `Dist Bit`, `Dist Xcita`, `MM Cutoff`, `MM Res`, `MM Mix`, `Flanger Rate`, `Flanger Amount`, `Magic EQ Amount`, `Magic EQ Tune`, `Comp Amount`, `Master Mix`, `LFO 2 Rate` for LFO 1 only, and `Master Vol`).
+The system SHALL allow LFO 1, LFO 2, and the X/Y Pad axes to modulate any parameter in the active plugin's Modulatable Targets profile (22 Distortion targets for `WvZz Distortion` and 16 Dynamics targets for `WvZz Dynamics`).
 
 #### Scenario: LFO 1 cross-modulating LFO 2 Rate
-- **WHEN** LFO 1 target is set to `LFO 2 Rate` with a non-zero depth
+- **WHEN** LFO 1 target is set to `LFO 2 Rate` with a non-zero depth in either plugin profile
 - **THEN** LFO 1's output dynamically shifts the instantaneous oscillation rate of LFO 2
 
 #### Scenario: BP Both Cuts modulation
-- **WHEN** a modulator targets `BP Both Cuts`
+- **WHEN** a modulator targets `BP Both Cuts` in the Distortion profile
 - **THEN** both `bp_low_cut` and `bp_high_cut` shift simultaneously in logarithmic frequency space
 
 #### Scenario: X/Y Pad and LFO combined modulation
@@ -41,6 +41,10 @@ The system SHALL allow LFO 1, LFO 2, and the X/Y Pad axes to modulate any parame
 #### Scenario: Beat-synced Master Volume pumping and gating
 - **WHEN** an LFO or X/Y axis targets `Master Vol` with non-zero depth
 - **THEN** the master output gain is modulated in real time to produce rhythmic sidechain pumping, reverse-bass swells, or trance gating
+
+#### Scenario: Dynamics target modulation
+- **WHEN** an LFO or X/Y axis targets any Dynamics target (`Sub X-Over`, `SC HPF`, `Trans Attack`, `Trans Sustain`, `OTT Depth`, `OTT Upward`, `OTT Sheen`, `Comp Thresh`, `Comp Mix`, `Pump Amount`, `Pump Curve`, or `Clip Drive`) with non-zero depth
+- **THEN** the target parameter is modulated in real time to produce dynamic transient movement, OTT breathing, or rhythmic pumping
 
 ### Requirement: Assignable Macro X/Y Controller Pad
 The system SHALL provide a 2D macro controller (`xy_x` and `xy_y` in `0.0` to `1.0`) that applies additive bipolar or unipolar offsets (`xy_x_depth` and `xy_y_depth`) to any selected target from the Modulatable Targets Enum.

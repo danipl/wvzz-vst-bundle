@@ -21,10 +21,12 @@ public:
     explicit AudioVisualizerSource(int capacity = defaultCapacity)
         : bufferCapacity(capacity),
           inputFifo(capacity),
-          outputFifo(capacity)
+          outputFifo(capacity),
+          gainReductionFifo(capacity)
     {
         inputBuffer.resize(static_cast<size_t>(capacity), 0.0f);
         outputBuffer.resize(static_cast<size_t>(capacity), 0.0f);
+        gainReductionBuffer.resize(static_cast<size_t>(capacity), 0.0f);
     }
 
     ~AudioVisualizerSource() = default;
@@ -38,8 +40,10 @@ public:
     {
         inputFifo.reset();
         outputFifo.reset();
+        gainReductionFifo.reset();
         std::fill(inputBuffer.begin(), inputBuffer.end(), 0.0f);
         std::fill(outputBuffer.begin(), outputBuffer.end(), 0.0f);
+        std::fill(gainReductionBuffer.begin(), gainReductionBuffer.end(), 0.0f);
     }
 
     /**
@@ -61,6 +65,45 @@ public:
     }
 
     /**
+     * @brief Pushes gain reduction (in negative dB) samples into the lock-free GR ring buffer.
+     */
+    void pushGainReduction(const float* grData, int numSamples) noexcept
+    {
+        if (numSamples <= 0 || grData == nullptr)
+            return;
+
+        int start1 = 0, size1 = 0, start2 = 0, size2 = 0;
+        gainReductionFifo.prepareToWrite(numSamples, start1, size1, start2, size2);
+
+        if (size1 > 0)
+            std::copy(grData, grData + size1, gainReductionBuffer.data() + start1);
+        if (size2 > 0)
+            std::copy(grData + size1, grData + size1 + size2, gainReductionBuffer.data() + start2);
+
+        gainReductionFifo.finishedWrite(size1 + size2);
+    }
+
+    /**
+     * @brief Pushes a scalar gain reduction (in negative dB) across numSamples into the ring buffer.
+     * Real-time audio thread safe: 0 heap allocations, lock-free.
+     */
+    void pushGainReductionValue(float grValue, int numSamples) noexcept
+    {
+        if (numSamples <= 0)
+            return;
+
+        int start1 = 0, size1 = 0, start2 = 0, size2 = 0;
+        gainReductionFifo.prepareToWrite(numSamples, start1, size1, start2, size2);
+
+        if (size1 > 0)
+            std::fill(gainReductionBuffer.data() + start1, gainReductionBuffer.data() + start1 + size1, grValue);
+        if (size2 > 0)
+            std::fill(gainReductionBuffer.data() + start2, gainReductionBuffer.data() + start2 + size2, grValue);
+
+        gainReductionFifo.finishedWrite(size1 + size2);
+    }
+
+    /**
      * @brief Reads available input samples on the GUI thread.
      */
     int readInput(float* dest, int maxSamples) noexcept
@@ -76,6 +119,14 @@ public:
         return readFromFifo(outputFifo, outputBuffer, dest, maxSamples);
     }
 
+    /**
+     * @brief Reads available gain reduction samples on the GUI thread.
+     */
+    int readGainReduction(float* dest, int maxSamples) noexcept
+    {
+        return readFromFifo(gainReductionFifo, gainReductionBuffer, dest, maxSamples);
+    }
+
     [[nodiscard]] int getNumReadyInput() const noexcept
     {
         return inputFifo.getNumReady();
@@ -84,6 +135,11 @@ public:
     [[nodiscard]] int getNumReadyOutput() const noexcept
     {
         return outputFifo.getNumReady();
+    }
+
+    [[nodiscard]] int getNumReadyGainReduction() const noexcept
+    {
+        return gainReductionFifo.getNumReady();
     }
 
     [[nodiscard]] int getCapacity() const noexcept
@@ -151,8 +207,10 @@ private:
     const int bufferCapacity;
     juce::AbstractFifo inputFifo;
     juce::AbstractFifo outputFifo;
+    juce::AbstractFifo gainReductionFifo;
     std::vector<float> inputBuffer;
     std::vector<float> outputBuffer;
+    std::vector<float> gainReductionBuffer;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioVisualizerSource)
 };

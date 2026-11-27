@@ -396,7 +396,9 @@ void WvZzDistortionAudioProcessor::setStateInformation(const void* data, int siz
 
 } // namespace wvzz
 
+#ifndef WVZZ_NO_CREATE_PLUGIN_FILTER
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
     return new wvzz::WvZzDistortionAudioProcessor();
 }
+#endif

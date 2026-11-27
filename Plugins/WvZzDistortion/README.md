@@ -175,7 +175,7 @@ WvZz Distortion is the flagship release of the **WvZz Modular Audio Plugin Suite
 | *WvZz Delay* | *Planned* | Tape, analog BBD & granular stereo delay | Modular fractional delay lines, diffusers, modulation matrix |
 | *WvZz Reverb* | *Planned* | Algorithmic plate, hall & non-linear spaces | Zero-allocation FDN (Feedback Delay Networks), early reflections |
 | *WvZz Modulation* | *Planned* | Chorus, ensemble, phaser & rotary tremolo | Multi-stage quadrature LFOs, multi-voice chorus lines |
-| *WvZz Dynamics* | *Planned* | Multi-band compressor, limiter & transient shaper | Andy Simper ZDF crossover networks, multi-instance compressors |
+| **WvZz Dynamics** | **Released** | 3-band OTT, bus compressor, transient shaper, rhythmic pumper & maximizer clipper | Linkwitz-Riley sub crossover, multi-instance `CompressorModule` chain |
 
 ---
 

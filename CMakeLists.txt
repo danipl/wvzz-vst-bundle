@@ -47,6 +47,35 @@ add_library(WvZzModules STATIC
     Source/Core/UI/SignalComparisonComponent.cpp
 
     # Audio Modules
+    Source/Modules/DynDetector/DynDetectorDSP.h
+    Source/Modules/DynDetector/DynDetectorDSP.cpp
+    Source/Modules/DynDetector/DynDetectorView.h
+    Source/Modules/DynDetector/DynDetectorView.cpp
+    Source/Modules/DynDetector/DynDetectorModule.h
+
+    Source/Modules/TransientShaper/TransientShaperDSP.h
+    Source/Modules/TransientShaper/TransientShaperDSP.cpp
+    Source/Modules/TransientShaper/TransientShaperView.h
+    Source/Modules/TransientShaper/TransientShaperView.cpp
+    Source/Modules/TransientShaper/TransientShaperModule.h
+
+    Source/Modules/MultibandOTT/MultibandOTTDSP.h
+    Source/Modules/MultibandOTT/MultibandOTTDSP.cpp
+    Source/Modules/MultibandOTT/MultibandOTTView.h
+    Source/Modules/MultibandOTT/MultibandOTTView.cpp
+    Source/Modules/MultibandOTT/MultibandOTTModule.h
+
+    Source/Modules/RhythmicPumper/RhythmicPumperDSP.h
+    Source/Modules/RhythmicPumper/RhythmicPumperDSP.cpp
+    Source/Modules/RhythmicPumper/RhythmicPumperView.h
+    Source/Modules/RhythmicPumper/RhythmicPumperView.cpp
+    Source/Modules/RhythmicPumper/RhythmicPumperModule.h
+
+    Source/Modules/MaximizerClipper/MaximizerClipperDSP.h
+    Source/Modules/MaximizerClipper/MaximizerClipperDSP.cpp
+    Source/Modules/MaximizerClipper/MaximizerClipperView.h
+    Source/Modules/MaximizerClipper/MaximizerClipperView.cpp
+    Source/Modules/MaximizerClipper/MaximizerClipperModule.h
     Source/Modules/BPFilter/BPFilterDSP.h
     Source/Modules/BPFilter/BPFilterDSP.cpp
     Source/Modules/BPFilter/BPFilterView.h
@@ -181,19 +210,82 @@ if(APPLE)
 endif()
 
 # ==============================================================================
+# Flagship Plugin Target: WvZzDynamics
+# ==============================================================================
+juce_add_plugin(WvZzDynamics
+    COMPANY_NAME "WvZz"
+    IS_SYNTH FALSE
+    NEEDS_MIDI_INPUT TRUE
+    NEEDS_MIDI_OUTPUT FALSE
+    IS_MIDI_EFFECT FALSE
+    EDITOR_WANTS_KEYBOARD_FOCUS FALSE
+    COPY_PLUGIN_AFTER_BUILD FALSE
+    PLUGIN_MANUFACTURER_CODE WvZz
+    PLUGIN_CODE WzDy
+    FORMATS VST3 Standalone
+    PRODUCT_NAME "WvZz Dynamics"
+)
+
+target_sources(WvZzDynamics
+    PRIVATE
+        Plugins/WvZzDynamics/PluginProcessor.h
+        Plugins/WvZzDynamics/PluginProcessor.cpp
+        Plugins/WvZzDynamics/PluginEditor.h
+        Plugins/WvZzDynamics/PluginEditor.cpp
+        Plugins/WvZzDynamics/Presets/FactoryPresets.h
+)
+
+target_include_directories(WvZzDynamics PRIVATE Plugins/WvZzDynamics Source)
+target_compile_features(WvZzDynamics PRIVATE cxx_std_20)
+
+target_compile_definitions(WvZzDynamics
+    PUBLIC
+        JUCE_WEB_BROWSER=0
+        JUCE_USE_CURL=0
+        JUCE_VST3_CAN_REPLACE_VST2=0
+)
+
+target_link_libraries(WvZzDynamics
+    PRIVATE
+        WvZzModules
+    PUBLIC
+        juce::juce_recommended_config_flags
+        juce::juce_recommended_lto_flags
+        juce::juce_recommended_warning_flags
+)
+
+if(APPLE)
+    if(TARGET WvZzDynamics_VST3)
+        add_custom_command(TARGET WvZzDynamics_VST3 POST_BUILD
+            COMMAND codesign --force --deep -s - "$<TARGET_BUNDLE_DIR:WvZzDynamics_VST3>"
+            COMMENT "Re-signing WvZz Dynamics VST3 bundle after moduleinfo.json generation"
+        )
+    endif()
+    if(TARGET WvZzDynamics_Standalone)
+        add_custom_command(TARGET WvZzDynamics_Standalone POST_BUILD
+            COMMAND codesign --force --deep -s - "$<TARGET_BUNDLE_DIR:WvZzDynamics_Standalone>"
+            COMMENT "Signing WvZz Dynamics Standalone app bundle"
+        )
+    endif()
+endif()
+
+# ==============================================================================
 # Headless DSP Test Target: wvzz_dsp_tests
 # ==============================================================================
 add_executable(wvzz_dsp_tests
     Tests/DSPTests.cpp
     Plugins/WvZzDistortion/PluginProcessor.cpp
     Plugins/WvZzDistortion/PluginEditor.cpp
+    Plugins/WvZzDynamics/PluginProcessor.cpp
+    Plugins/WvZzDynamics/PluginEditor.cpp
 )
 
 target_compile_features(wvzz_dsp_tests PRIVATE cxx_std_20)
-target_include_directories(wvzz_dsp_tests PRIVATE Source Plugins/WvZzDistortion ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(wvzz_dsp_tests PRIVATE Source Plugins/WvZzDistortion Plugins/WvZzDynamics ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_compile_definitions(wvzz_dsp_tests
     PUBLIC
+        WVZZ_NO_CREATE_PLUGIN_FILTER=1
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
 )

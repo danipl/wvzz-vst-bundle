@@ -136,6 +136,71 @@ private:
                 "X/Y Pad: 2D macro control mapping X and Y axes independently to any destination."
             }
         };
+
+        // --- Dynamics Modules Topics ---
+        topics["dyn_detector"] = {
+            "Sub & Detector (Linkwitz-Riley Sub Split & SC Filter)",
+            "Isolates sub-bass below the crossover frequency into a locked channel and shapes the sidechain detector path with HPF and spectral tilt.",
+            "Stage 1: Sub Lock & Detector Sculpting",
+            {
+                "Sub X-Over: 24 dB/oct crossover frequency (40 Hz - 300 Hz) to separate sub energy.",
+                "Sub Lock: When active, routes sub-bass around transient & OTT stages, preventing mud.",
+                "Sub Tight: Clamps sub sustain tails for punchy festival drops.",
+                "SC HPF: High-pass filter for the compression detector (20 Hz - 500 Hz).",
+                "SC Tilt: Spectral tilt filter (-6 dB to +6 dB/oct) weighting bass or high detector sensitivity.",
+                "SC Listen: Auditions the filtered sidechain detector audio directly."
+            }
+        };
+
+        topics["transient_shaper"] = {
+            "Transient & Gate (Differential Snap & Noise Gate)",
+            "Level-independent dual-envelope transient shaper with an integrated noise gate floor.",
+            "Stage 2: Transient Snap & Gating",
+            {
+                "Attack: Boosts or cuts initial transient Tok (-12 dB to +12 dB).",
+                "Sustain: Boosts or attenuates post-transient decay tails (-18 dB to +12 dB).",
+                "Speed: Fast (leads and plucks) or Punch (longer kick envelope).",
+                "Gate Floor: Silences noise and hiss between hits (-80 dB to 0 dB)."
+            }
+        };
+
+        topics["multiband_ott"] = {
+            "Hyper-OTT (3-Band Upward/Downward Compressor)",
+            "Aggressive multiband dynamics processor lifting quiet detail and squashing peaks across Low, Mid, and High bands.",
+            "Stage 3: Upward Density & Euphoric Sheen",
+            {
+                "Depth: Overall wet blend of the 3-band upward/downward engine (0% to 100%).",
+                "Up Drive: Upward compression gain bringing quiet harmonic details forward.",
+                "Down Drive: Downward compression clamping loud resonant peaks.",
+                "Time: Ballistics scaling from 10% snap to 200% smooth leveling.",
+                "High Sheen: High-frequency Euphoric air boost above 2.5 kHz (0 dB to +12 dB)."
+            }
+        };
+
+        topics["rhythmic_pumper"] = {
+            "Rhythmic Pumper (Tempo-Synced Sidechain Envelope)",
+            "Dual-mode ducking engine locked to host PPQ tempo or triggered by external sidechain audio.",
+            "Stage 5: Rhythmic Ducking & Movement",
+            {
+                "Amount: Modulation depth of the pumping envelope (0% to 100%).",
+                "Sync Rate: Tempo division (1/1 to 1/16, dotted and triplets).",
+                "Shape: Classic Duck, Hard Kick Clear, Reverse Bass, and Festival Swell.",
+                "Curve: Skews envelope attack vs recovery timing.",
+                "Sub Only: Confines pumping strictly to frequencies below 180 Hz."
+            }
+        };
+
+        topics["maximizer_clipper"] = {
+            "Maximizer Clipper (Loudness Gain & ADAA Waveshaper)",
+            "Final brickwall loudness stage combining gain maximizer and zero-latency anti-aliased clipper.",
+            "Stage 6: Loudness Maximization",
+            {
+                "Drive: Input gain driving the signal into the brickwall ceiling (0 dB to +18 dB).",
+                "Ceiling: Output peak ceiling (-12 dBFS to 0 dBFS).",
+                "Mode: Hard Clip (flat ceiling), Warm Tube (tanh), Hardstyle Crunch (asymmetric folding).",
+                "Mix: Parallel dry/wet clipper blend."
+            }
+        };
     }
 
     std::unordered_map<juce::String, HelpTopic> topics;

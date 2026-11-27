@@ -139,12 +139,21 @@ CompressorView::CompressorView(juce::AudioProcessorValueTreeState& apvts,
         addAndMakeVisible(*helpButton);
     }
 
-    // 5 Rotary Knobs: Thresh, Ratio, Attack, Release, Mix
+    // 6 Rotary Knobs: Thresh, Ratio, Attack, Release, Knee, Mix
     initRotary(threshKnob,  paramId("thresh"),  "Thresh",  ui::WvZzLookAndFeel::honeyGold);
     initRotary(ratioKnob,   paramId("ratio"),   "Ratio",   ui::WvZzLookAndFeel::honeyGold);
     initRotary(attackKnob,  paramId("attack"),  "Attack",  ui::WvZzLookAndFeel::honeyGold);
     initRotary(releaseKnob, paramId("release"), "Release", ui::WvZzLookAndFeel::honeyGold);
+    initRotary(kneeKnob,    paramId("knee"),    "Knee",    ui::WvZzLookAndFeel::honeyGold);
     initRotary(mixKnob,     paramId("mix"),     "Mix",     ui::WvZzLookAndFeel::honeyGold);
+
+    // Mode Selector: Opto / VCA / FET
+    modeSelector.addItem("Opto", 1);
+    modeSelector.addItem("VCA", 2);
+    modeSelector.addItem("FET", 3);
+    modeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+        apvtsState, paramId("mode"), modeSelector);
+    addAndMakeVisible(modeSelector);
 
     // Phat Mode Toggle
     phatToggle.button.setButtonText("PHAT");
@@ -205,17 +214,19 @@ void CompressorView::resized()
 
     auto content = card.getContentBounds();
 
-    // Top Row: Horizontal Gain Reduction Meter + PHAT Pill Button
+    // Top Row: Horizontal Gain Reduction Meter + Mode Selector + PHAT Pill Button
     auto topRow = content.removeFromTop(20);
-    phatToggle.button.setBounds(topRow.removeFromRight(50).reduced(0, 1));
-    topRow.removeFromRight(8); // Gap
+    phatToggle.button.setBounds(topRow.removeFromRight(46).reduced(0, 1));
+    topRow.removeFromRight(4);
+    modeSelector.setBounds(topRow.removeFromRight(62).reduced(0, 1));
+    topRow.removeFromRight(6); // Gap
 
     if (grMeter != nullptr)
         grMeter->setBounds(topRow.reduced(0, 1));
 
     content.removeFromTop(3); // Margin between top meter bar and knobs
 
-    // Bottom Row: 5 Knobs filling the full width and remaining height
+    // Bottom Row: 6 Knobs filling the full width and remaining height
     auto layoutKnob = [](RotaryControl& rc, juce::Rectangle<int> r) {
         int labelH = 14;
         auto knobArea = r.reduced(1);
@@ -223,13 +234,14 @@ void CompressorView::resized()
         rc.slider.setBounds(knobArea);
     };
 
-    const int numKnobs = 5;
+    const int numKnobs = 6;
     const int knobWidth = content.getWidth() / numKnobs;
 
     layoutKnob(threshKnob,  content.removeFromLeft(knobWidth));
     layoutKnob(ratioKnob,   content.removeFromLeft(knobWidth));
     layoutKnob(attackKnob,  content.removeFromLeft(knobWidth));
     layoutKnob(releaseKnob, content.removeFromLeft(knobWidth));
+    layoutKnob(kneeKnob,    content.removeFromLeft(knobWidth));
     layoutKnob(mixKnob,     content);
 }
 

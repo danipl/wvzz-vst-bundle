@@ -10,7 +10,9 @@ SignalComparisonComponent::SignalComparisonComponent(dsp::AudioVisualizerSource&
 {
     inputWaveform.resize(waveformBufferSize, 0.0f);
     outputWaveform.resize(waveformBufferSize, 0.0f);
+    grWaveform.resize(waveformBufferSize, 0.0f);
     tempReadBuffer.resize(1024, 0.0f);
+    tempGrBuffer.resize(1024, 0.0f);
 
     smoothInputSpectrum.fill(-100.0f);
     smoothOutputSpectrum.fill(-100.0f);
@@ -26,16 +28,19 @@ SignalComparisonComponent::SignalComparisonComponent(dsp::AudioVisualizerSource&
     setupBtn(scopeButton);
     setupBtn(spectrumButton);
     setupBtn(deltaButton);
+    setupBtn(grButton);
     setupBtn(scaleButton);
     setupBtn(freezeButton);
 
     scopeButton.setClickingTogglesState(false);
     spectrumButton.setClickingTogglesState(false);
     deltaButton.setClickingTogglesState(false);
+    grButton.setClickingTogglesState(false);
 
     scopeButton.onClick = [this] { setMode(Mode::Oscilloscope); };
     spectrumButton.onClick = [this] { setMode(Mode::Spectrum); };
     deltaButton.onClick = [this] { setMode(Mode::Delta); };
+    grButton.onClick = [this] { setMode(Mode::GainReduction); };
 
     scaleButton.onClick = [this] {
         if (gainScale >= 3.9f)
@@ -94,15 +99,17 @@ void SignalComparisonComponent::resized()
     auto bounds = getLocalBounds();
     auto topBar = bounds.removeFromTop(26).reduced(2, 2);
 
-    scopeButton.setBounds(topBar.removeFromLeft(60));
-    topBar.removeFromLeft(4);
-    spectrumButton.setBounds(topBar.removeFromLeft(75));
-    topBar.removeFromLeft(4);
-    deltaButton.setBounds(topBar.removeFromLeft(60));
+    scopeButton.setBounds(topBar.removeFromLeft(50));
+    topBar.removeFromLeft(3);
+    spectrumButton.setBounds(topBar.removeFromLeft(68));
+    topBar.removeFromLeft(3);
+    deltaButton.setBounds(topBar.removeFromLeft(48));
+    topBar.removeFromLeft(3);
+    grButton.setBounds(topBar.removeFromLeft(38));
 
-    freezeButton.setBounds(topBar.removeFromRight(60));
+    freezeButton.setBounds(topBar.removeFromRight(55));
     topBar.removeFromRight(4);
-    scaleButton.setBounds(topBar.removeFromRight(40));
+    scaleButton.setBounds(topBar.removeFromRight(36));
 }
 
 void SignalComparisonComponent::timerCallback()
@@ -123,9 +130,30 @@ void SignalComparisonComponent::timerCallback()
             }
 
             visualizerSource.readOutput(tempReadBuffer.data(), toRead);
+            float sumSq = 0.0f;
+            float maxAbs = 0.0f;
             for (int i = 0; i < toRead; ++i)
             {
-                outputWaveform[static_cast<size_t>((writeIndex + i) % waveformBufferSize)] = tempReadBuffer[static_cast<size_t>(i)];
+                const float s = tempReadBuffer[static_cast<size_t>(i)];
+                outputWaveform[static_cast<size_t>((writeIndex + i) % waveformBufferSize)] = s;
+                sumSq += s * s;
+                maxAbs = std::max(maxAbs, std::abs(s));
+            }
+
+            const float rms = std::sqrt(sumSq / static_cast<float>(toRead));
+            if (rms > 1e-4f && maxAbs > 1e-4f)
+            {
+                const float instCrestDb = juce::Decibels::gainToDecibels(maxAbs / rms);
+                liveCrestFactorDb = liveCrestFactorDb * 0.9f + instCrestDb * 0.1f;
+            }
+
+            int grReady = visualizerSource.getNumReadyGainReduction();
+            int grToRead = std::min({ grReady, toRead, static_cast<int>(tempGrBuffer.size()) });
+            if (grToRead > 0)
+            {
+                visualizerSource.readGainReduction(tempGrBuffer.data(), grToRead);
+                for (int i = 0; i < grToRead; ++i)
+                    grWaveform[static_cast<size_t>((writeIndex + i) % waveformBufferSize)] = tempGrBuffer[static_cast<size_t>(i)];
             }
 
             writeIndex = (writeIndex + toRead) % waveformBufferSize;
@@ -199,19 +227,34 @@ void SignalComparisonComponent::paint(juce::Graphics& g)
         (currentMode == Mode::Spectrum) ? WvZzLookAndFeel::neonCyan.withAlpha(0.25f) : WvZzLookAndFeel::cardBg);
     deltaButton.setColour(juce::TextButton::buttonColourId,
         (currentMode == Mode::Delta) ? WvZzLookAndFeel::neonAmber.withAlpha(0.25f) : WvZzLookAndFeel::cardBg);
+    grButton.setColour(juce::TextButton::buttonColourId,
+        (currentMode == Mode::GainReduction) ? WvZzLookAndFeel::honeyGold.withAlpha(0.25f) : WvZzLookAndFeel::cardBg);
 
     switch (currentMode)
     {
-        case Mode::Oscilloscope: renderOscilloscope(g, displayArea); break;
-        case Mode::Spectrum:     renderSpectrum(g, displayArea); break;
-        case Mode::Delta:        renderDelta(g, displayArea); break;
+        case Mode::Oscilloscope:  renderOscilloscope(g, displayArea); break;
+        case Mode::Spectrum:      renderSpectrum(g, displayArea); break;
+        case Mode::Delta:         renderDelta(g, displayArea); break;
+        case Mode::GainReduction: renderGainReduction(g, displayArea); break;
     }
 
     // Legend at bottom
     auto legendArea = displayArea.removeFromBottom(16.0f).reduced(6.0f, 0.0f);
     g.setFont(juce::FontOptions(9.0f, juce::Font::bold));
 
-    if (currentMode != Mode::Delta)
+    if (currentMode == Mode::GainReduction)
+    {
+        g.setColour(WvZzLookAndFeel::neonAmber);
+        g.drawText("___ OUT (Audio)", legendArea.removeFromLeft(95.0f), juce::Justification::centredLeft, false);
+
+        g.setColour(WvZzLookAndFeel::coralRed);
+        g.drawText("--- GR (Gain Reduction)", legendArea.removeFromLeft(125.0f), juce::Justification::centredLeft, false);
+
+        g.setColour(WvZzLookAndFeel::skyCyan);
+        g.drawText(juce::String::formatted("Crest: %.1f dB", liveCrestFactorDb),
+                   legendArea, juce::Justification::centredRight, false);
+    }
+    else if (currentMode != Mode::Delta)
     {
         // Dry Input label
         g.setColour(WvZzLookAndFeel::neonCyan);
@@ -220,6 +263,10 @@ void SignalComparisonComponent::paint(juce::Graphics& g)
         // Wet Output label
         g.setColour(WvZzLookAndFeel::neonAmber);
         g.drawText("___ OUT (Processed)", legendArea.removeFromLeft(110.0f), juce::Justification::centredLeft, false);
+
+        g.setColour(WvZzLookAndFeel::textSecondary.withAlpha(0.7f));
+        g.drawText(juce::String::formatted("Crest: %.1f dB", liveCrestFactorDb),
+                   legendArea, juce::Justification::centredRight, false);
     }
     else
     {
@@ -429,6 +476,64 @@ void SignalComparisonComponent::renderDelta(juce::Graphics& g, juce::Rectangle<f
     // Stroke difference line
     g.setColour(juce::Colour(0xffff2a85));
     g.strokePath(deltaPath, juce::PathStrokeType(1.8f));
+}
+
+void SignalComparisonComponent::renderGainReduction(juce::Graphics& g, juce::Rectangle<float> area)
+{
+    const float midY = area.getCentreY();
+    const float halfHeight = area.getHeight() * 0.44f;
+
+    // Grid center line
+    g.setColour(WvZzLookAndFeel::cardBorder.withAlpha(0.35f));
+    g.drawHorizontalLine(static_cast<int>(midY), area.getX(), area.getRight());
+
+    // Grid dB guidelines for GR (Top = 0 dB, Middle = -12 dB, Bottom = -24 dB)
+    for (float db : { 0.0f, -6.0f, -12.0f, -18.0f, -24.0f })
+    {
+        const float norm = -db / 24.0f; // 0.0 to 1.0
+        const float y = area.getY() + norm * area.getHeight() * 0.85f;
+        g.setColour(WvZzLookAndFeel::cardBorder.withAlpha(0.2f));
+        g.drawHorizontalLine(static_cast<int>(y), area.getX(), area.getRight());
+    }
+
+    const int numPoints = static_cast<int>(area.getWidth());
+    if (numPoints <= 1) return;
+
+    juce::Path outPath;
+    juce::Path grPath;
+
+    for (int i = 0; i < numPoints; ++i)
+    {
+        float normX = static_cast<float>(i) / static_cast<float>(numPoints - 1);
+        float x = area.getX() + normX * area.getWidth();
+
+        int sampleIdx = (writeIndex - numPoints * 2 + (i * 2) + waveformBufferSize * 2) % waveformBufferSize;
+        float outSample = juce::jlimit(-1.5f, 1.5f, outputWaveform[static_cast<size_t>(sampleIdx)] * gainScale);
+        float outY = midY - outSample * halfHeight;
+
+        float grDb = juce::jlimit(-24.0f, 0.0f, grWaveform[static_cast<size_t>(sampleIdx)]);
+        float grNorm = -grDb / 24.0f; // 0 (no GR) to 1 (-24 dB)
+        float grY = area.getY() + grNorm * area.getHeight() * 0.85f;
+
+        if (i == 0)
+        {
+            outPath.startNewSubPath(x, outY);
+            grPath.startNewSubPath(x, grY);
+        }
+        else
+        {
+            outPath.lineTo(x, outY);
+            grPath.lineTo(x, grY);
+        }
+    }
+
+    // Draw Output Waveform
+    g.setColour(WvZzLookAndFeel::neonAmber.withAlpha(0.45f));
+    g.strokePath(outPath, juce::PathStrokeType(1.2f));
+
+    // Draw Gain Reduction Curve
+    g.setColour(WvZzLookAndFeel::coralRed);
+    g.strokePath(grPath, juce::PathStrokeType(2.0f));
 }
 
 } // namespace wvzz::ui
