@@ -77,7 +77,7 @@ public:
         g.setFont(brandFont);
         g.setColour(WvZzLookAndFeel::textPrimary);
 
-        const float brandW = brandFont.getStringWidth("WvZz");
+        const float brandW = static_cast<float>(juce::GlyphArrangement::getStringWidthInt(juce::Font(brandFont), "WvZz"));
         auto brandArea = juce::Rectangle<float>(textX, bounds.getY(), brandW, bounds.getHeight());
         g.drawText("WvZz", brandArea, juce::Justification::centredLeft, false);
 
@@ -89,7 +89,7 @@ public:
             const float subPadY = 3.0f * scale;
 
             juce::Font subFont(juce::FontOptions(subFontSize, juce::Font::bold));
-            const float textW = subFont.getStringWidth(subtitle) + subPadX * 2.0f;
+            const float textW = static_cast<float>(juce::GlyphArrangement::getStringWidthInt(juce::Font(subFont), subtitle)) + subPadX * 2.0f;
             const float textH = subFontSize + subPadY * 2.0f;
 
             const float subX = textX + brandW + 10.0f * scale;
