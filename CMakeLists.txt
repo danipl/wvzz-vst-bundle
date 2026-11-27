@@ -49,6 +49,8 @@ add_library(WvZzModules STATIC
     Source/Core/UI/ModuleViewControls.h
     Source/Core/UI/LfoPhaseScopeComponent.h
     Source/Core/UI/LfoPhaseScopeComponent.cpp
+    Source/Core/UI/DelayTapDisplayComponent.h
+    Source/Core/UI/DelayTapDisplayComponent.cpp
 
     # Audio Modules
     Source/Modules/DynDetector/DynDetectorDSP.h
@@ -122,6 +124,22 @@ add_library(WvZzModules STATIC
     Source/Modules/Tremolo/TremoloView.h
     Source/Modules/Tremolo/TremoloView.cpp
     Source/Modules/Tremolo/TremoloModule.h
+
+    Source/Modules/Delay/DelayLine.h
+    Source/Modules/Delay/DelayTapState.h
+    Source/Modules/Delay/DelayDSP.h
+    Source/Modules/Delay/DelayDSP.cpp
+    Source/Modules/Delay/DelayView.h
+    Source/Modules/Delay/DelayView.cpp
+    Source/Modules/Delay/DelayModule.h
+
+    Source/Modules/Grain/GrainEngine.h
+    Source/Modules/Grain/GrainEngine.cpp
+    Source/Modules/Grain/GrainDSP.h
+    Source/Modules/Grain/GrainDSP.cpp
+    Source/Modules/Grain/GrainView.h
+    Source/Modules/Grain/GrainView.cpp
+    Source/Modules/Grain/GrainModule.h
 
     Source/Modules/MagicEQ/MagicEQDSP.h
     Source/Modules/MagicEQ/MagicEQDSP.cpp
@@ -242,6 +260,7 @@ endfunction()
 wvzz_add_plugin(WvZzDistortion WzDs "WvZz Distortion")
 wvzz_add_plugin(WvZzDynamics   WzDy "WvZz Dynamics")
 wvzz_add_plugin(WvZzModulation WzMd "WvZz Modulation")
+wvzz_add_plugin(WvZzDelay      WzDl "WvZz Delay")
 
 # ==============================================================================
 # Headless DSP Test Target: wvzz_dsp_tests
@@ -254,6 +273,8 @@ add_executable(wvzz_dsp_tests
     Plugins/WvZzDynamics/PluginEditor.cpp
     Plugins/WvZzModulation/PluginProcessor.cpp
     Plugins/WvZzModulation/PluginEditor.cpp
+    Plugins/WvZzDelay/PluginProcessor.cpp
+    Plugins/WvZzDelay/PluginEditor.cpp
 )
 
 target_compile_features(wvzz_dsp_tests PRIVATE cxx_std_20)

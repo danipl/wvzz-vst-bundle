@@ -146,6 +146,49 @@ private:
             }
         };
 
+        topics["delay"] = {
+            "Delay (Clean, Tape, BBD, Granular)",
+            "Repeats the signal after a set time. The feedback loop has filters and a soft clipper, so it stays under control above 100%.",
+            "Stage 1: Echoes",
+            {
+                "Mode: Clean is exact. Tape saturates and wobbles. BBD is dark. Granular rebuilds the repeats from grains.",
+                "Routing: Stereo repeats each side. Ping-Pong alternates left and right.",
+                "SYNC / Note: Lock the time to the host tempo.",
+                "Time: Delay time (20 ms to 4 s). R Offset adds up to 50 ms on the right.",
+                "Feedback: Amount sent back in (0 to 110%).",
+                "High-Pass / Low-Pass: Filters inside the loop. Each repeat gets thinner or darker.",
+                "Diffusion: Smears each repeat with all-pass filters.",
+                "Ducking: Lowers the repeats while the dry signal plays.",
+                "Wow / Drive: Tape and BBD character.",
+                "Bypass: Stops recording new input. The repeats already playing fade out."
+            }
+        };
+
+        topics["grain"] = {
+            "Grain Engine (32 Voices)",
+            "Cuts the delayed audio into short pieces (grains) and replays them. Active when the Delay mode is Granular.",
+            "Granular Mode",
+            {
+                "Size: Length of one grain (10 to 500 ms).",
+                "Density: Grains started per second (2 to 60).",
+                "Pitch: Shifts each grain (-24 to +24 semitones). With feedback, every repeat shifts again.",
+                "Spray: Random position of each grain, up to 200 ms later.",
+                "Reverse: Chance that a grain plays backwards.",
+                "Spread: Random left/right position of each grain."
+            }
+        };
+
+        topics["delay_taps"] = {
+            "Delay Tap Display",
+            "Shows when each repeat arrives. Left channel is above the line, right channel below. Bar height is the repeat level.",
+            "Center Column: TAPS tab",
+            {
+                "The white bar at 0 is the dry signal.",
+                "Bars shrink with ducking while the dry signal plays.",
+                "The green line at the bottom is the current wet level."
+            }
+        };
+
         topics["magic_eq"] = {
             "Magic EQ (Sub-Bass Harmonic Resonator)",
             "Dual-band equalizer with a sub-bass resonant peak and gentle high-frequency presence shelf.",
