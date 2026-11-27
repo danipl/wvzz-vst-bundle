@@ -26,8 +26,8 @@ See proposal.md - Why. The plugin model is `Plugins/WvZzDelay/` (GH-16). This ch
 4. **Mixing matrix:** 8 x 8 Hadamard, computed in place with 3 butterfly stages and scaled by `1/sqrt(8)`. It is orthogonal, so it preserves energy. Alternative: Householder (cheaper, less mixing); rejected, the Hadamard matrix gives a denser tail.
 5. **Decay.** Each line has the gain `10^(-3 x length / (decay x sampleRate))`. With an orthogonal matrix every mode of the network then decays by 60 dB in `rev_decay` seconds. All gains are below 1 for every setting (0.9995 at 20 s with the longest line).
 6. **Line lengths.** Base lengths in ms. Plate: 11.3, 14.9, 18.1, 21.7, 25.3, 29.9, 34.1, 38.3. Hall and Shimmer: 37.3, 43.7, 51.1, 59.3, 67.9, 76.1, 85.7, 97.3. `rev_size` scales them by `0.5 .. 1.5`. A size change glides (one-pole, about 100 ms), so it bends the pitch for a moment instead of clicking. A mode change crossfades the wet output down and up around a network clear (about 30 ms each way).
-7. **Damping.** In each line: a one-pole low-pass at `rev_hidamp` and a one-pole high-pass at `rev_lodamp`. With both fully open (20 kHz, 20 Hz) the extra loss at 1 kHz is below 1%, so the Decay knob is exact there. The states are flushed against denormals.
-8. **Loudness.** The feed into the network is scaled by `sqrt(1 - g^2)` (g = mean line gain), so a long decay does not get louder than a short one, and a constant loud input cannot pile up without limit.
+7. **Damping.** In each line a one-pole tracker splits off the range above `rev_hidamp`, and a second one the range below `rev_lodamp`. The line removes a share of that range on every pass. The share is computed from the line length so that the loss is the same per second in every line: fully damped frequencies decay in 35% of the Decay time, in every mode and at every size. At the end positions (20 kHz, 20 Hz) the damping is off, so the Decay knob is exact. The first version filtered the whole signal on every pass; in Plate mode, with about 40 passes per second, lows and highs then died in a fraction of a second.
+8. **Loudness.** The feed into the network is scaled by `sqrt(1 - mean(g^2))` (g = the line gains), so a long decay does not get louder than a short one, and a constant loud input cannot pile up without limit.
 9. **Tail modulation.** Four of the eight lines are read with a slow sine offset (0.31 to 0.97 Hz, up to ±12 samples x `rev_mod`) through the fractional read.
 10. **Shimmer.** The stereo network output is written into two `DelayLine`s (0.5 s). A `dsp::GrainEngine` reads them at a 120 ms base delay with the pitch ratio of `rev_interval` (`+12`, `+7`, `+19`, `+24`, `-12` semitones). Its output goes through a 9 kHz low-pass and `tanh`, is scaled by `0.5 x rev_shimmer`, and is added to the network input. The `tanh` bounds what the pitch path can add, so the loop stays stable. In Plate and Hall mode the path is off.
 11. **Width.** Mid/side: `side x rev_width`.
@@ -39,7 +39,7 @@ See proposal.md - Why. The plugin model is `Plugins/WvZzDelay/` (GH-16). This ch
 
 15. **Processor** like WvZz Delay. Chain: input gain → modulation module → EarlyReflections → Reverb → Master. Tail = pre-delay + decay + 0.1 s. The selected preset index is saved with the state.
 16. **Modulation profile `Reverb`:** 11 appended `ModTarget` values plus Master Mix, LFO 2 Rate, Master Vol.
-17. **`ui::ReverbDecayDisplayComponent`**: reads `ReverbDecayState`; a pure function `decayDbAt(timeSec, ...)` gives the curve and is unit-tested. The low and high lines use the extra loss per pass of the damping filters at 100 Hz and 8 kHz.
+17. **`ui::ReverbDecayDisplayComponent`**: reads `ReverbDecayState`; a pure function `decayDbAt(timeSec, ...)` gives the curve and is unit-tested. The low and high lines use the same damping model as the DSP, evaluated at 100 Hz and 8 kHz.
 18. **Layout (1080 x 680):** left x=10, w=320: Reverb card (h 624). Center x=336, w=408. Right x=750, w=320: Early Reflections (h 462), Master (h 156).
 
 ## File Changes
@@ -63,6 +63,16 @@ See proposal.md - Why. The plugin model is `Plugins/WvZzDelay/` (GH-16). This ch
 - [Loudness scaling makes short decays relatively louder] → Accepted; it keeps the wet level steady across the Decay range.
 - [UI cannot be tested automatically] → Editor construction test and a screenshot check of the Standalone app. Listening still needs a person.
 
+## Implementation Notes
+
+- Measured decay times are 3% to 6% shorter than the Decay setting in Plate and Hall (8 cases, limit 10%).
+- The wet output has 4.4 dB of headroom after the shimmer send. With 30 s of full-scale noise at 20 s decay and maximum shimmer the peak is 3.4.
+- Bypassing the Reverb card also fades the early reflections. Bypassing the Early Reflections card fades its level to 0 instead of switching.
+- The first damping version filtered the whole signal on every pass. The decay display showed that Plate lows and highs then died in 0.2 to 0.5 s. Damping now works per second (decision 7).
+
 ## Open Questions
 
-- None that change the specs or the tasks.
+Outside this ticket; they do not change the plan:
+
+- The decay display and the reported tail length do not include the extra length that shimmer adds to the tail.
+- The Standalone apps of the bundle crash now and then with a heap corruption signal (see the GH-15 and GH-16 notes). WvZz Reverb ran without a crash in 2 launches.

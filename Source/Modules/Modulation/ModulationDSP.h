@@ -114,11 +114,30 @@ inline const juce::StringArray& getModTargetNames(ModProfile profile = ModProfil
         "Master Vol"
     };
 
+    static const juce::StringArray reverbNames {
+        "None",
+        "Pre-Delay",
+        "Size",
+        "Decay",
+        "High Damp",
+        "Low Damp",
+        "Diffusion",
+        "Tail Mod",
+        "Width",
+        "Shimmer",
+        "Reverb Mix",
+        "ER Level",
+        "Master Mix",
+        "LFO 2 Rate",
+        "Master Vol"
+    };
+
     switch (profile)
     {
         case ModProfile::Dynamics:   return dynNames;
         case ModProfile::Modulation: return modFxNames;
         case ModProfile::Delay:      return delayNames;
+        case ModProfile::Reverb:     return reverbNames;
         case ModProfile::Distortion: break;
     }
     return distNames;
@@ -154,6 +173,19 @@ inline ModTarget getModTargetForIndex(int index, ModProfile profile = ModProfile
             ModTarget::DlyTime, ModTarget::DlyFeedback, ModTarget::DlyLp, ModTarget::DlyHp,
             ModTarget::DlyDiffusion, ModTarget::DlyWow, ModTarget::DlyMix,
             ModTarget::GrainSize, ModTarget::GrainPitch, ModTarget::GrainSpray,
+            ModTarget::MasterMix, ModTarget::LFO2Rate, ModTarget::MasterVol
+        };
+        constexpr int mapSize = static_cast<int>(sizeof(map) / sizeof(map[0]));
+        return (index >= 0 && index < mapSize) ? map[index] : ModTarget::None;
+    }
+
+    if (profile == ModProfile::Reverb)
+    {
+        static constexpr ModTarget map[] = {
+            ModTarget::None,
+            ModTarget::RevPredelay, ModTarget::RevSize, ModTarget::RevDecay, ModTarget::RevHiDamp,
+            ModTarget::RevLoDamp, ModTarget::RevDiffusion, ModTarget::RevMod, ModTarget::RevWidth,
+            ModTarget::RevShimmer, ModTarget::RevMix, ModTarget::ErLevel,
             ModTarget::MasterMix, ModTarget::LFO2Rate, ModTarget::MasterVol
         };
         constexpr int mapSize = static_cast<int>(sizeof(map) / sizeof(map[0]));

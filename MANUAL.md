@@ -51,6 +51,7 @@ A root [`Makefile`](Makefile) provides simple commands:
 | `make dynamics-vst3` / `make dynamics-standalone` | Builds only WvZz Dynamics |
 | `make modulation-vst3` / `make modulation-standalone` | Builds only WvZz Modulation |
 | `make delay-vst3` / `make delay-standalone` | Builds only WvZz Delay |
+| `make reverb-vst3` / `make reverb-standalone` | Builds only WvZz Reverb |
 | `make install` (or `make install-vst3`) | Builds, copies, and ad-hoc signs every `.vst3` bundle in `~/Library/Audio/Plug-Ins/VST3/` |
 | `make install-system` | Copies and signs every `.vst3` bundle in `/Library/Audio/Plug-Ins/VST3/` (requires `sudo`) |
 | `make test` | Runs the zero-allocation DSP quantitative tests (`wvzz_dsp_tests`) |

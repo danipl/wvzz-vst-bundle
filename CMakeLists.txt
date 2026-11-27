@@ -21,7 +21,7 @@ FetchContent_MakeAvailable(JUCE)
 
 # ==============================================================================
 # Static Library Target: WvZzModules
-# Contains all reusable Core interfaces, UI components, and the 8 audio modules
+# Contains all reusable Core interfaces, UI components, and the audio modules
 # ==============================================================================
 add_library(WvZzModules STATIC
     # Core Interfaces & DSP
@@ -51,6 +51,8 @@ add_library(WvZzModules STATIC
     Source/Core/UI/LfoPhaseScopeComponent.cpp
     Source/Core/UI/DelayTapDisplayComponent.h
     Source/Core/UI/DelayTapDisplayComponent.cpp
+    Source/Core/UI/ReverbDecayDisplayComponent.h
+    Source/Core/UI/ReverbDecayDisplayComponent.cpp
 
     # Audio Modules
     Source/Modules/DynDetector/DynDetectorDSP.h
@@ -140,6 +142,19 @@ add_library(WvZzModules STATIC
     Source/Modules/Grain/GrainView.h
     Source/Modules/Grain/GrainView.cpp
     Source/Modules/Grain/GrainModule.h
+
+    Source/Modules/EarlyReflections/EarlyReflectionsDSP.h
+    Source/Modules/EarlyReflections/EarlyReflectionsDSP.cpp
+    Source/Modules/EarlyReflections/EarlyReflectionsView.h
+    Source/Modules/EarlyReflections/EarlyReflectionsView.cpp
+    Source/Modules/EarlyReflections/EarlyReflectionsModule.h
+
+    Source/Modules/Reverb/ReverbDecayState.h
+    Source/Modules/Reverb/ReverbDSP.h
+    Source/Modules/Reverb/ReverbDSP.cpp
+    Source/Modules/Reverb/ReverbView.h
+    Source/Modules/Reverb/ReverbView.cpp
+    Source/Modules/Reverb/ReverbModule.h
 
     Source/Modules/MagicEQ/MagicEQDSP.h
     Source/Modules/MagicEQ/MagicEQDSP.cpp
@@ -261,6 +276,7 @@ wvzz_add_plugin(WvZzDistortion WzDs "WvZz Distortion")
 wvzz_add_plugin(WvZzDynamics   WzDy "WvZz Dynamics")
 wvzz_add_plugin(WvZzModulation WzMd "WvZz Modulation")
 wvzz_add_plugin(WvZzDelay      WzDl "WvZz Delay")
+wvzz_add_plugin(WvZzReverb     WzRv "WvZz Reverb")
 
 # ==============================================================================
 # Headless DSP Test Target: wvzz_dsp_tests
@@ -275,6 +291,8 @@ add_executable(wvzz_dsp_tests
     Plugins/WvZzModulation/PluginEditor.cpp
     Plugins/WvZzDelay/PluginProcessor.cpp
     Plugins/WvZzDelay/PluginEditor.cpp
+    Plugins/WvZzReverb/PluginProcessor.cpp
+    Plugins/WvZzReverb/PluginEditor.cpp
 )
 
 target_compile_features(wvzz_dsp_tests PRIVATE cxx_std_20)

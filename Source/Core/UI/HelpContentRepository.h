@@ -189,6 +189,48 @@ private:
             }
         };
 
+        topics["reverb"] = {
+            "Reverb (Plate, Hall, Shimmer)",
+            "Eight delay lines feed each other through a mixing matrix and build the reverb tail. Decay sets how long the tail lasts.",
+            "Stage 2: Reverb Tail",
+            {
+                "Mode: Plate is dense and bright. Hall builds up slowly. Shimmer adds a pitch-shifted tail.",
+                "Pre-Delay: Gap before the tail starts (0 to 250 ms).",
+                "Size: Length of the delay lines. Decay stays the same.",
+                "Decay: Time for the tail to fall by 60 dB (0.2 to 20 s).",
+                "Low Damp / High Damp: Lows below / highs above this frequency decay faster.",
+                "Diffusion: Smears the input before it enters the network.",
+                "Tail Mod: Slow movement of the delay lines. Removes ringing.",
+                "Width: Stereo width of the tail. 0 is mono.",
+                "Shimmer / Interval: Amount and pitch of the shifted tail (Shimmer mode).",
+                "Mix: Dry/wet balance. Bypass lets the tail fade out."
+            }
+        };
+
+        topics["early_reflections"] = {
+            "Early Reflections",
+            "The first separate echoes of a room, before the dense tail. Eight echoes per side, with a different pattern left and right.",
+            "Stage 1: First Echoes",
+            {
+                "Size: Length of the echo pattern (about 16 to 80 ms).",
+                "Diffusion: Smears the echoes so they sound less like single taps.",
+                "Level: Loudness of the early reflections. They also feed the reverb tail.",
+                "Bypass: Turns the early reflections off. The tail then gets only the dry signal."
+            }
+        };
+
+        topics["reverb_decay"] = {
+            "Decay Curve Display",
+            "Shows how the tail level falls over time. The thick line is the mid range. The other lines show how damping shortens lows and highs.",
+            "Center Column: DECAY tab",
+            {
+                "The white bar at 0 is the dry sound.",
+                "The gap after it is the pre-delay.",
+                "The green block is the early-reflections pattern.",
+                "The mid line reaches -60 dB after the Decay time."
+            }
+        };
+
         topics["magic_eq"] = {
             "Magic EQ (Sub-Bass Harmonic Resonator)",
             "Dual-band equalizer with a sub-bass resonant peak and gentle high-frequency presence shelf.",
