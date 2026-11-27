@@ -7,16 +7,42 @@ BUILD_DIR         := build
 DIST_DIR          := dist
 VERSION           := $(shell sed -n 's/.*VERSION \([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' CMakeLists.txt | head -n 1)
 
-TARGET_DIST_VST3  := $(BUILD_DIR)/WvZzDistortion_artefacts/Release/VST3/WvZz\ Distortion.vst3
-TARGET_DIST_APP   := $(BUILD_DIR)/WvZzDistortion_artefacts/Release/Standalone/WvZz\ Distortion.app
-TARGET_DYN_VST3   := $(BUILD_DIR)/WvZzDynamics_artefacts/Release/VST3/WvZz\ Dynamics.vst3
-TARGET_DYN_APP    := $(BUILD_DIR)/WvZzDynamics_artefacts/Release/Standalone/WvZz\ Dynamics.app
+# ------------------------------------------------------------------------------
+# Plugin list
+# To add a plugin: add its CMake target to PLUGIN_TARGETS, then define
+# KEY_<Target> (short name used in `make <key>-vst3`) and PRODUCT_<Target>
+# (bundle name, may contain spaces). Every target below loops over this list.
+# ------------------------------------------------------------------------------
+PLUGIN_TARGETS         := WvZzDistortion WvZzDynamics
+
+KEY_WvZzDistortion     := distortion
+PRODUCT_WvZzDistortion := WvZz Distortion
+
+KEY_WvZzDynamics       := dynamics
+PRODUCT_WvZzDynamics   := WvZz Dynamics
+
+PLUGIN_KEYS            := $(foreach t,$(PLUGIN_TARGETS),$(KEY_$(t)))
 
 # Destination paths
 USER_VST3_DIR     := $(HOME)/Library/Audio/Plug-Ins/VST3
 SYS_VST3_DIR      := /Library/Audio/Plug-Ins/VST3
 
-.PHONY: all config build vst3 standalone distortion-vst3 distortion-standalone dynamics-vst3 dynamics-standalone test package install install-vst3 install-system clean status help
+# Built bundle paths for one target: $(call vst3_path,<Target>) / $(call app_path,<Target>)
+vst3_path = $(BUILD_DIR)/$(1)_artefacts/Release/VST3/$(PRODUCT_$(1)).vst3
+app_path  = $(BUILD_DIR)/$(1)_artefacts/Release/Standalone/$(PRODUCT_$(1)).app
+
+# Copy one built VST3 to a folder and ad-hoc sign it.
+# $(call install_vst3,<Target>,<dest dir>,<command prefix, e.g. sudo>)
+define install_vst3
+	@$(3) rm -rf "$(2)/$(PRODUCT_$(1)).vst3"
+	@$(3) cp -R "$(call vst3_path,$(1))" "$(2)/"
+	@$(3) codesign --force --deep -s - "$(2)/$(PRODUCT_$(1)).vst3"
+	@echo "Installed and signed $(PRODUCT_$(1)).vst3 to $(2)/"
+
+endef
+
+.PHONY: all config build vst3 standalone test package install install-vst3 install-system clean status help \
+        $(foreach k,$(PLUGIN_KEYS),$(k)-vst3 $(k)-standalone)
 
 # Default target: build everything
 all: build
@@ -27,18 +53,15 @@ all: build
 help:
 	@echo "WvZz Bundle Build System Commands:"
 	@echo "  make config                - Configure CMake project with Ninja"
-	@echo "  make build                 - Build all targets (WvZzModules, Distortion, Dynamics, Tests)"
-	@echo "  make vst3                  - Build all VST3 bundles (Distortion & Dynamics)"
+	@echo "  make build                 - Build all targets (WvZzModules, all plugins, tests)"
+	@echo "  make vst3                  - Build all VST3 bundles"
 	@echo "  make standalone            - Build all Standalone desktop applications"
-	@echo "  make distortion-vst3       - Build only WvZz Distortion VST3"
-	@echo "  make distortion-standalone - Build only WvZz Distortion Standalone app"
-	@echo "  make dynamics-vst3         - Build only WvZz Dynamics VST3"
-	@echo "  make dynamics-standalone   - Build only WvZz Dynamics Standalone app"
+	@$(foreach t,$(PLUGIN_TARGETS),printf "  make %-22s - Build only $(PRODUCT_$(t)) VST3\n" "$(KEY_$(t))-vst3"; printf "  make %-22s - Build only $(PRODUCT_$(t)) Standalone app\n" "$(KEY_$(t))-standalone";)
 	@echo "  make test                  - Run zero-allocation DSP quantitative tests (wvzz_dsp_tests)"
 	@echo "  make package               - Package and verify Universal Binary release archives"
-	@echo "  make install               - Copy .vst3 bundles to ~/Library/Audio/Plug-Ins/VST3/"
-	@echo "  make install-vst3          - Copy .vst3 bundles to ~/Library/Audio/Plug-Ins/VST3/"
-	@echo "  make install-system        - Copy .vst3 bundles to /Library/Audio/Plug-Ins/VST3/ (requires sudo)"
+	@echo "  make install               - Copy all .vst3 bundles to ~/Library/Audio/Plug-Ins/VST3/"
+	@echo "  make install-vst3          - Same as make install"
+	@echo "  make install-system        - Copy all .vst3 bundles to /Library/Audio/Plug-Ins/VST3/ (requires sudo)"
 	@echo "  make clean                 - Remove build directory"
 	@echo "  make status                - Check installed plugins status"
 
@@ -55,28 +78,25 @@ build: $(BUILD_DIR)/build.ninja
 	@cmake --build $(BUILD_DIR)
 
 vst3: $(BUILD_DIR)/build.ninja
-	@cmake --build $(BUILD_DIR) --target WvZzDistortion_VST3 WvZzDynamics_VST3
+	@cmake --build $(BUILD_DIR) --target $(addsuffix _VST3,$(PLUGIN_TARGETS))
 	@echo "Built VST3 bundles in $(BUILD_DIR)/*_artefacts/Release/VST3/"
 
 standalone: $(BUILD_DIR)/build.ninja
-	@cmake --build $(BUILD_DIR) --target WvZzDistortion_Standalone WvZzDynamics_Standalone
+	@cmake --build $(BUILD_DIR) --target $(addsuffix _Standalone,$(PLUGIN_TARGETS))
 	@echo "Built Standalone apps in $(BUILD_DIR)/*_artefacts/Release/Standalone/"
 
-distortion-vst3: $(BUILD_DIR)/build.ninja
-	@cmake --build $(BUILD_DIR) --target WvZzDistortion_VST3
-	@echo "Built Distortion VST3 at: $(TARGET_DIST_VST3)"
+# Per-plugin targets: make <key>-vst3 and make <key>-standalone
+define plugin_rules
+$(KEY_$(1))-vst3: $$(BUILD_DIR)/build.ninja
+	@cmake --build $$(BUILD_DIR) --target $(1)_VST3
+	@echo "Built $(PRODUCT_$(1)) VST3 at: $(call vst3_path,$(1))"
 
-distortion-standalone: $(BUILD_DIR)/build.ninja
-	@cmake --build $(BUILD_DIR) --target WvZzDistortion_Standalone
-	@echo "Built Distortion Standalone app at: $(TARGET_DIST_APP)"
+$(KEY_$(1))-standalone: $$(BUILD_DIR)/build.ninja
+	@cmake --build $$(BUILD_DIR) --target $(1)_Standalone
+	@echo "Built $(PRODUCT_$(1)) Standalone app at: $(call app_path,$(1))"
 
-dynamics-vst3: $(BUILD_DIR)/build.ninja
-	@cmake --build $(BUILD_DIR) --target WvZzDynamics_VST3
-	@echo "Built Dynamics VST3 at: $(TARGET_DYN_VST3)"
-
-dynamics-standalone: $(BUILD_DIR)/build.ninja
-	@cmake --build $(BUILD_DIR) --target WvZzDynamics_Standalone
-	@echo "Built Dynamics Standalone app at: $(TARGET_DYN_APP)"
+endef
+$(foreach t,$(PLUGIN_TARGETS),$(eval $(call plugin_rules,$(t))))
 
 # ------------------------------------------------------------------------------
 # Verification & Tests
@@ -133,30 +153,19 @@ package: build test
 # ------------------------------------------------------------------------------
 install: vst3
 	@mkdir -p $(USER_VST3_DIR)
-	@rm -rf $(USER_VST3_DIR)/"WvZz Distortion.vst3" $(USER_VST3_DIR)/"WvZz Dynamics.vst3"
-	@cp -R $(TARGET_DIST_VST3) $(USER_VST3_DIR)/
-	@cp -R $(TARGET_DYN_VST3) $(USER_VST3_DIR)/
-	@codesign --force --deep -s - $(USER_VST3_DIR)/"WvZz Distortion.vst3"
-	@codesign --force --deep -s - $(USER_VST3_DIR)/"WvZz Dynamics.vst3"
-	@if [ -w $(SYS_VST3_DIR) ]; then \
-		cp -R $(TARGET_DIST_VST3) $(SYS_VST3_DIR)/ && \
-		cp -R $(TARGET_DYN_VST3) $(SYS_VST3_DIR)/ && \
-		codesign --force --deep -s - $(SYS_VST3_DIR)/"WvZz Distortion.vst3" && \
-		codesign --force --deep -s - $(SYS_VST3_DIR)/"WvZz Dynamics.vst3" && \
-		echo "Synchronized system VST3 plugins at $(SYS_VST3_DIR)/"; \
-	fi
-	@echo "Installed and signed WvZz Distortion.vst3 and WvZz Dynamics.vst3 to $(USER_VST3_DIR)/"
+	$(foreach t,$(PLUGIN_TARGETS),$(call install_vst3,$(t),$(USER_VST3_DIR),))
+	@if [ -w $(SYS_VST3_DIR) ]; then $(MAKE) --no-print-directory sync-system; fi
+
+# Internal: refresh the system folder without sudo when it is writable
+.PHONY: sync-system
+sync-system:
+	$(foreach t,$(PLUGIN_TARGETS),$(call install_vst3,$(t),$(SYS_VST3_DIR),))
 
 install-vst3: install
 
 install-system: vst3
 	@sudo mkdir -p $(SYS_VST3_DIR)
-	@sudo rm -rf $(SYS_VST3_DIR)/"WvZz Distortion.vst3" $(SYS_VST3_DIR)/"WvZz Dynamics.vst3"
-	@sudo cp -R $(TARGET_DIST_VST3) $(SYS_VST3_DIR)/
-	@sudo cp -R $(TARGET_DYN_VST3) $(SYS_VST3_DIR)/
-	@sudo codesign --force --deep -s - $(SYS_VST3_DIR)/"WvZz Distortion.vst3"
-	@sudo codesign --force --deep -s - $(SYS_VST3_DIR)/"WvZz Dynamics.vst3"
-	@echo "Installed system WvZz Distortion.vst3 and WvZz Dynamics.vst3 to $(SYS_VST3_DIR)/"
+	$(foreach t,$(PLUGIN_TARGETS),$(call install_vst3,$(t),$(SYS_VST3_DIR),sudo))
 
 clean:
 	@rm -rf $(BUILD_DIR)
@@ -165,8 +174,6 @@ clean:
 status:
 	@echo "=== Installed WvZz Audio Plug-ins ==="
 	@echo "User VST3:"
-	@ls -ld $(USER_VST3_DIR)/"WvZz Distortion.vst3" 2>/dev/null || echo "  WvZz Distortion: (not found)"
-	@ls -ld $(USER_VST3_DIR)/"WvZz Dynamics.vst3" 2>/dev/null || echo "  WvZz Dynamics: (not found)"
+	@$(foreach t,$(PLUGIN_TARGETS),ls -ld "$(USER_VST3_DIR)/$(PRODUCT_$(t)).vst3" 2>/dev/null || echo "  $(PRODUCT_$(t)): (not found)";)
 	@echo "System VST3:"
-	@ls -ld $(SYS_VST3_DIR)/"WvZz Distortion.vst3" 2>/dev/null || echo "  WvZz Distortion: (not found)"
-	@ls -ld $(SYS_VST3_DIR)/"WvZz Dynamics.vst3" 2>/dev/null || echo "  WvZz Dynamics: (not found)"
+	@$(foreach t,$(PLUGIN_TARGETS),ls -ld "$(SYS_VST3_DIR)/$(PRODUCT_$(t)).vst3" 2>/dev/null || echo "  $(PRODUCT_$(t)): (not found)";)
