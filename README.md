@@ -105,9 +105,23 @@ All plugins in the WvZz suite are built as native **macOS Universal Binaries** (
 
 <br/>
 
-### 🗺️ Bundle Roadmap & Upcoming Plugins
+### 5. 🌌 WvZz Reverb *(Available Now)*
 
-Because every DSP block lives in our shared `WvZzModules` library, the bundle is actively expanding into a complete production suite:
+> **Plate, Hall & Shimmer Reverb**  
+> One Feedback Delay Network (8 delay lines that feed each other through a mixing matrix) with three modes and a separate early-reflections stage.
+
+| Key Capabilities | Highlights | Documentation |
+| :--- | :--- | :--- |
+| **Three Modes** | Plate (short lines, dense and bright), Hall (long lines, slow build-up), Shimmer (a pitch-shifted tail fed back into the network). | 📖 **[Plugin Overview & DSP Guide](Plugins/WvZzReverb/README.md)** |
+| **Decay You Can Trust** | The Decay knob sets the 60 dB decay time from 0.2 to 20 seconds. Size changes the room, not the decay time. | 🎛️ **[Producer User Manual](Plugins/WvZzReverb/USER_MANUAL.md)** |
+| **Early Reflections & Tone** | 8 early echoes per side, pre-delay, low and high damping, input diffusion, tail modulation, and stereo width. | 🧪 **[10 Factory Presets Included](Plugins/WvZzReverb/USER_MANUAL.md)** |
+| **Tail & Display** | Bypass lets the tail fade out. The **DECAY** tab shows the decay of lows, mids, and highs over time. | 🛠️ **[Source Code (`Plugins/WvZzReverb`)](Plugins/WvZzReverb)** |
+
+<br/>
+
+### 🗺️ Bundle Roadmap
+
+All five plugins of the roadmap are released. Every DSP block lives in the shared `WvZzModules` library:
 
 | Plugin Target | Status | Focus & Sonic Character | Core Architecture |
 | :--- | :---: | :--- | :--- |
@@ -115,7 +129,7 @@ Because every DSP block lives in our shared `WvZzModules` library, the bundle is
 | **🎚️ WvZz Dynamics** | ✅ **Released** | Sub lock, transient shaper & gate, 3-band OTT, bus compressor, tempo-synced pumper & maximizer clipper | `DynDetector` + `TransientShaper` + `MultibandOTT` + `Compressor` + `RhythmicPumper` + `MaximizerClipper` |
 | **🌊 WvZz Modulation** | ✅ **Released** | Multi-voice chorus, all-pass phaser, through-zero flanger & harmonic tremolo in a serial chain | `Chorus` + `Phaser` + `Flanger` + `Tremolo`, LFO phase scope |
 | **⏱️ WvZz Delay** | ✅ **Released** | Clean, tape, BBD & granular stereo delay with ducking, diffusion and feedback up to 110% | `Delay` + `Grain` (32 voices) on a shared `DelayLine`, delay-tap display |
-| **🌌 WvZz Reverb** | 🚧 *Planned* | Algorithmic plate, lush hall & non-linear shimmer spaces | Zero-allocation Feedback Delay Networks (FDN) & early reflection diffusers |
+| **🌌 WvZz Reverb** | ✅ **Released** | Plate, hall & shimmer reverb with early reflections, damping and tail modulation | `EarlyReflections` + `Reverb` (8-line Feedback Delay Network, Hadamard matrix), decay-curve display |
 
 ---
 
@@ -159,6 +173,8 @@ At the heart of the repository is `libWvZzModules.a` (`Source/Modules/`), a self
 11. **[`Tremolo`](Source/Modules/Tremolo/)**: Classic level tremolo and a harmonic mode that modulates the bands below and above a crossover in opposite phase.
 12. **[`Delay`](Source/Modules/Delay/)**: Reusable fractional `DelayLine` plus a stereo delay with Clean, Tape, BBD, and Granular modes, filtered feedback up to 110%, diffusion, ducking, and tail-preserving bypass.
 13. **[`Grain`](Source/Modules/Grain/)**: Grain engine with 32 pre-allocated voices, Hann windows, pitch shift, reverse, spray, and stereo spread.
+14. **[`EarlyReflections`](Source/Modules/EarlyReflections/)**: 8 early echoes per channel with all-pass diffusion, written to the auxiliary bus for the reverb.
+15. **[`Reverb`](Source/Modules/Reverb/)**: 8-line Feedback Delay Network with a Hadamard mixing matrix, exact decay time, damping, tail modulation, and a shimmer path that reuses the grain engine.
 
 ---
 

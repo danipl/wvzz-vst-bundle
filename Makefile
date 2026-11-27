@@ -13,7 +13,7 @@ VERSION           := $(shell sed -n 's/.*VERSION \([0-9][0-9]*\.[0-9][0-9]*\.[0-
 # KEY_<Target> (short name used in `make <key>-vst3`) and PRODUCT_<Target>
 # (bundle name, may contain spaces). Every target below loops over this list.
 # ------------------------------------------------------------------------------
-PLUGIN_TARGETS         := WvZzDistortion WvZzDynamics WvZzModulation WvZzDelay
+PLUGIN_TARGETS         := WvZzDistortion WvZzDynamics WvZzModulation WvZzDelay WvZzReverb
 
 KEY_WvZzDistortion     := distortion
 PRODUCT_WvZzDistortion := WvZz Distortion
@@ -26,6 +26,9 @@ PRODUCT_WvZzModulation := WvZz Modulation
 
 KEY_WvZzDelay          := delay
 PRODUCT_WvZzDelay      := WvZz Delay
+
+KEY_WvZzReverb         := reverb
+PRODUCT_WvZzReverb     := WvZz Reverb
 
 PLUGIN_KEYS            := $(foreach t,$(PLUGIN_TARGETS),$(KEY_$(t)))
 

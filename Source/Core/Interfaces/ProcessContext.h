@@ -12,12 +12,13 @@ enum class ModProfile : int
     Distortion = 0,
     Dynamics,
     Modulation,
-    Delay
+    Delay,
+    Reverb
 };
 
 /**
  * @brief Modulatable Targets Enum across WvZz Distortion (0..21), WvZz Dynamics (22..33),
- * WvZz Modulation (34..42), and WvZz Delay (43..52). Values are appended only, so saved sessions stay valid.
+ * WvZz Modulation (34..42), WvZz Delay (43..52), and WvZz Reverb (53..63). Values are appended only, so saved sessions stay valid.
  */
 enum class ModTarget : int
 {
@@ -81,6 +82,19 @@ enum class ModTarget : int
     GrainSize,
     GrainPitch,
     GrainSpray,
+
+    // --- Reverb Profile Targets (WvZz Reverb) ---
+    RevPredelay,
+    RevSize,
+    RevDecay,
+    RevHiDamp,
+    RevLoDamp,
+    RevDiffusion,
+    RevMod,
+    RevWidth,
+    RevShimmer,
+    RevMix,
+    ErLevel,
 
     // Keep last: number of ModTarget values. New targets are appended above this line.
     NumTargets

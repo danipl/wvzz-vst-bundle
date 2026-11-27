@@ -5,6 +5,11 @@
 #include "Plugins/WvZzDynamics/Presets/FactoryPresets.h"
 #include "Plugins/WvZzModulation/PluginProcessor.h"
 #include "Plugins/WvZzModulation/PluginEditor.h"
+#include "Plugins/WvZzReverb/PluginProcessor.h"
+#include "Plugins/WvZzReverb/PluginEditor.h"
+#include "Modules/EarlyReflections/EarlyReflectionsModule.h"
+#include "Modules/Reverb/ReverbModule.h"
+#include "Core/UI/ReverbDecayDisplayComponent.h"
 #include "Plugins/WvZzDelay/PluginProcessor.h"
 #include "Plugins/WvZzDelay/PluginEditor.h"
 #include "Modules/Delay/DelayModule.h"
@@ -1255,7 +1260,12 @@ public:
         bool hasAux = false;
         wvzz::ProcessContext ctx { buffer, dry, aux, hasAux };
         module.process(ctx);
+        lastHasAux = hasAux;
     }
+
+    /** Auxiliary bus content and flag after the last run() (used by the early-reflections tests). */
+    juce::AudioBuffer<float>& getAux() { return aux; }
+    bool lastHasAux { false };
 
     const juce::String getName() const override { return "ModuleTestHost"; }
     void prepareToPlay(double, int) override {}
@@ -2895,6 +2905,739 @@ static void testWvZzDelayEditorAndTaps()
     std::cout << "  -> PASS\n" << std::endl;
 }
 
+// ==============================================================================
+// WvZz Reverb suites (GH-17)
+// ==============================================================================
+
+/**
+ * Decay time (seconds for a 60 dB drop) from the slope of the level after `start`.
+ * Level = RMS in 20 ms windows; a straight line is fitted between -5 dB and -35 dB below the first window.
+ */
+static float measureDecaySeconds(const std::vector<float>& x, size_t start, double sampleRate)
+{
+    const size_t window = static_cast<size_t>(sampleRate * 0.02);
+    std::vector<double> times, levels;
+    double reference = -1000.0;
+    for (size_t pos = start; pos + window <= x.size(); pos += window)
+    {
+        const double rms = rmsOf(x, pos, window);
+        const double db = 20.0 * std::log10(std::max(1.0e-12, rms));
+        if (reference < -999.0)
+            reference = db;
+        const double relative = db - reference;
+        if (relative <= -5.0 && relative >= -35.0)
+        {
+            times.push_back(static_cast<double>(pos - start) / sampleRate);
+            levels.push_back(relative);
+        }
+        if (relative < -40.0)
+            break;
+    }
+    if (times.size() < 4)
+        return 0.0f;
+
+    double meanT = 0.0, meanL = 0.0;
+    for (size_t i = 0; i < times.size(); ++i) { meanT += times[i]; meanL += levels[i]; }
+    meanT /= static_cast<double>(times.size());
+    meanL /= static_cast<double>(times.size());
+    double num = 0.0, den = 0.0;
+    for (size_t i = 0; i < times.size(); ++i)
+    {
+        num += (times[i] - meanT) * (levels[i] - meanL);
+        den += (times[i] - meanT) * (times[i] - meanT);
+    }
+    const double slopeDbPerSecond = num / std::max(1.0e-12, den);
+    return (slopeDbPerSecond < 0.0) ? static_cast<float>(-60.0 / slopeDbPerSecond) : 0.0f;
+}
+
+/** Magnitude of one frequency in a stretch of signal (Goertzel). */
+static float toneLevel(const std::vector<float>& x, size_t start, size_t length, float hz, double sampleRate)
+{
+    const double w = juce::MathConstants<double>::twoPi * hz / sampleRate;
+    const double coeff = 2.0 * std::cos(w);
+    double s1 = 0.0, s2 = 0.0;
+    size_t count = 0;
+    for (size_t n = start; n < start + length && n < x.size(); ++n, ++count)
+    {
+        const double s0 = x[n] + coeff * s1 - s2;
+        s2 = s1;
+        s1 = s0;
+    }
+    const double power = s1 * s1 + s2 * s2 - coeff * s1 * s2;
+    return count > 0 ? static_cast<float>(std::sqrt(std::max(0.0, power)) / static_cast<double>(count)) : 0.0f;
+}
+
+static std::vector<float> noiseBurst(size_t totalLength, size_t burstLength, float amplitude, int seed)
+{
+    std::vector<float> x(totalLength, 0.0f);
+    juce::Random rng(seed);
+    for (size_t n = 0; n < burstLength && n < totalLength; ++n)
+        x[n] = (rng.nextFloat() * 2.0f - 1.0f) * amplitude;
+    return x;
+}
+
+static void testEarlyReflectionsModule()
+{
+    std::cout << "[Reverb 1/6] Early reflections: echo pattern, size, level, bypass, zero allocation, prefix..." << std::endl;
+    const double sampleRate = 48000.0;
+    const int blockSize = 512;
+
+    // Feeds one impulse and returns the auxiliary bus (left, right) over 0.2 s.
+    auto pattern = [&](float size, float level, float diffusion, bool bypass, std::vector<float>& auxL, std::vector<float>& auxR,
+                       bool* flag = nullptr, float* mainChange = nullptr) {
+        wvzz::modules::EarlyReflectionsDSP er("er");
+        ModuleTestHost host(er);
+        host.set("er_size", size);
+        host.set("er_level", level);
+        host.set("er_diffusion", diffusion);
+        host.set("er_bypass", bypass ? 1.0f : 0.0f);
+        host.prepare(sampleRate, blockSize);
+        host.getAux().clear();
+
+        juce::AudioBuffer<float> buffer(2, blockSize), input(2, blockSize);
+        auxL.clear();
+        auxR.clear();
+        for (int b = 0; b < 19; ++b)
+        {
+            buffer.clear();
+            if (b == 0)
+            {
+                buffer.setSample(0, 0, 1.0f);
+                buffer.setSample(1, 0, 1.0f);
+            }
+            input.makeCopyOf(buffer);
+            host.getAux().clear();
+            host.run(buffer);
+            if (flag != nullptr && b == 0) *flag = host.lastHasAux;
+            if (mainChange != nullptr) *mainChange = std::max(*mainChange, maxAbsDiff(buffer, input));
+            for (int i = 0; i < blockSize; ++i)
+            {
+                auxL.push_back(host.getAux().getSample(0, i));
+                auxR.push_back(host.getAux().getSample(1, i));
+            }
+        }
+    };
+
+    // Counts separate echoes: groups of samples above the threshold with a gap of at least 16 samples between groups.
+    auto countEchoes = [](const std::vector<float>& x) {
+        int groups = 0;
+        long lastHit = -1000;
+        for (size_t n = 0; n < x.size(); ++n)
+        {
+            if (std::abs(x[n]) > 0.01f)
+            {
+                if (static_cast<long>(n) - lastHit > 16)
+                    ++groups;
+                lastHit = static_cast<long>(n);
+            }
+        }
+        return groups;
+    };
+    auto lastEcho = [](const std::vector<float>& x) {
+        size_t last = 0;
+        for (size_t n = 0; n < x.size(); ++n)
+            if (std::abs(x[n]) > 0.01f)
+                last = n;
+        return last;
+    };
+
+    // --- Scenario: Impulse becomes a pattern of echoes (diffusion 0 keeps them separate) ---
+    std::vector<float> l, r;
+    bool flag = false;
+    float mainChange = 0.0f;
+    pattern(1.0f, 1.0f, 0.0f, false, l, r, &flag, &mainChange);
+    const int echoesL = countEchoes(l), echoesR = countEchoes(r);
+    float worstLR = 0.0f;
+    for (size_t n = 0; n < l.size(); ++n)
+        worstLR = std::max(worstLR, std::abs(l[n] - r[n]));
+    std::cout << "  -> separate echoes: left " << echoesL << ", right " << echoesR << "; last echo at "
+              << static_cast<double>(lastEcho(l)) * 1000.0 / sampleRate << " ms" << std::endl;
+    check(flag, "active early reflections must mark the auxiliary bus as used");
+    check(echoesL >= 8 && echoesR >= 8, "one impulse must become at least 8 echoes per channel");
+    check(worstLR > 0.05f, "left and right echo patterns must differ");
+    check(mainChange < 1.0e-9f, "the early reflections must not change the main buffer");
+
+    // --- Scenario: Size scales the pattern ---
+    std::vector<float> smallL, smallR;
+    pattern(0.0f, 1.0f, 0.0f, false, smallL, smallR);
+    const double smallMs = static_cast<double>(lastEcho(smallL)) * 1000.0 / sampleRate;
+    const double largeMs = static_cast<double>(lastEcho(l)) * 1000.0 / sampleRate;
+    std::cout << "  -> pattern length: size 0 -> " << smallMs << " ms, size 1 -> " << largeMs << " ms" << std::endl;
+    check(smallMs > 14.0 && smallMs < 26.0 && largeMs > 78.0 && largeMs < 92.0, "size must scale the pattern from about 16 ms to about 80 ms");
+
+    // Diffusion smears the taps into more samples
+    std::vector<float> diffL, diffR;
+    pattern(1.0f, 1.0f, 1.0f, false, diffL, diffR);
+    auto countSamples = [](const std::vector<float>& x) { int c = 0; for (float v : x) if (std::abs(v) > 0.002f) ++c; return c; };
+    check(countSamples(diffL) > countSamples(l) * 2, "diffusion must smear the echoes over more samples");
+
+    // --- Scenario: Level zero or bypass gives no early reflections ---
+    pattern(1.0f, 0.0f, 0.5f, false, l, r);
+    check(lastEcho(l) == 0 && *std::max_element(l.begin(), l.end()) < 1.0e-9f, "level 0 must add nothing to the auxiliary bus");
+    flag = true;
+    pattern(1.0f, 1.0f, 0.5f, true, l, r, &flag);
+    check(!flag && *std::max_element(l.begin(), l.end()) < 1.0e-9f, "a bypassed module must not use the auxiliary bus");
+
+    // --- Zero allocation and prefixing ---
+    {
+        wvzz::modules::EarlyReflectionsDSP er("slot2_er");
+        ModuleTestHost host(er);
+        check(host.getAPVTS().getParameter("slot2_er_level") != nullptr && host.getAPVTS().getParameter("er_level") == nullptr,
+              "early-reflections parameter ids must use the instance prefix");
+        host.prepare(sampleRate, blockSize);
+        juce::AudioBuffer<float> buffer(2, blockSize);
+        generateSineWave(buffer, sampleRate, 440.0f);
+        host.run(buffer);
+        g_allocationCount = 0;
+        g_trackingAllocations = true;
+        for (int b = 0; b < 1000; ++b)
+        {
+            generateSineWave(buffer, sampleRate, 440.0f);
+            host.run(buffer);
+        }
+        g_trackingAllocations = false;
+        std::cout << "  -> heap allocations in 1,000 blocks: " << g_allocationCount << std::endl;
+        check(g_allocationCount == 0, "early reflections must not allocate while processing");
+    }
+
+    std::cout << "  -> PASS\n" << std::endl;
+}
+
+/** Configures a Reverb host for measurements: wet only, damping open, no modulation. */
+static void configureDryRoomlessReverb(ModuleTestHost& host, int mode, float decay, float size)
+{
+    host.set("rev_mode", static_cast<float>(mode));
+    host.set("rev_decay", decay);
+    host.set("rev_size", size);
+    host.set("rev_predelay", 0.0f);
+    host.set("rev_hidamp", 20000.0f);
+    host.set("rev_lodamp", 20.0f);
+    host.set("rev_mod", 0.0f);
+    host.set("rev_mix", 1.0f);
+}
+
+static void testReverbDecayAndStability()
+{
+    std::cout << "[Reverb 2/6] Reverb: matrix energy, measured decay time, bounded at max decay + shimmer (30 s), mix 0..." << std::endl;
+    const double sampleRate = 48000.0;
+    const int blockSize = 512;
+
+    // --- Scenario: Mixing matrix preserves energy ---
+    {
+        juce::Random rng(31);
+        float worst = 0.0f;
+        for (int trial = 0; trial < 200; ++trial)
+        {
+            std::array<float, 8> v {};
+            float before = 0.0f, after = 0.0f;
+            for (auto& x : v) { x = rng.nextFloat() * 2.0f - 1.0f; before += x * x; }
+            wvzz::modules::ReverbDSP::mixMatrix(v);
+            for (auto x : v) after += x * x;
+            worst = std::max(worst, std::abs(after - before) / before);
+        }
+        std::cout << "  -> Hadamard matrix: largest relative energy change in 200 random vectors = " << worst << std::endl;
+        check(worst < 1.0e-5f, "the FDN mixing matrix must preserve energy");
+    }
+
+    // --- Scenarios: Measured decay matches the setting; size keeps the decay time ---
+    struct Case { int mode; float decay; float size; };
+    const Case cases[] = {
+        { 0, 1.0f, 0.5f }, { 0, 3.0f, 0.5f }, { 1, 1.0f, 0.5f }, { 1, 3.0f, 0.5f },
+        { 1, 2.0f, 0.2f }, { 1, 2.0f, 0.9f }, { 0, 2.0f, 0.2f }, { 0, 2.0f, 0.9f }
+    };
+    for (const auto& c : cases)
+    {
+        wvzz::modules::ReverbDSP reverb("rev");
+        ModuleTestHost host(reverb);
+        configureDryRoomlessReverb(host, c.mode, c.decay, c.size);
+        host.prepare(sampleRate, blockSize);
+
+        const size_t total = static_cast<size_t>(blockSize) * static_cast<size_t>((c.decay * 0.9 + 0.6) * sampleRate / blockSize);
+        std::vector<float> out;
+        renderThroughHost(host, noiseBurst(total, 4800, 0.5f, 17), out);
+        const float measured = measureDecaySeconds(out, 4800 + 9600, sampleRate); // start 0.2 s after the burst
+        const float errorPercent = 100.0f * std::abs(measured - c.decay) / c.decay;
+        std::cout << "  -> " << wvzz::modules::getReverbModeNames()[c.mode] << ", size " << c.size << ", decay " << c.decay
+                  << " s: measured " << measured << " s (" << errorPercent << "% off)" << std::endl;
+        check(errorPercent < 10.0f, "the measured decay time must be within 10% of rev_decay");
+    }
+
+    // --- Scenario: Output stays bounded at maximum decay and shimmer, 30 seconds of full-scale noise ---
+    {
+        wvzz::modules::ReverbDSP reverb("rev");
+        ModuleTestHost host(reverb);
+        host.set("rev_mode", 2.0f);
+        host.set("rev_decay", 20.0f);
+        host.set("rev_shimmer", 1.0f);
+        host.set("rev_interval", 0.0f);
+        host.set("rev_size", 1.0f);
+        host.set("rev_hidamp", 20000.0f);
+        host.set("rev_lodamp", 20.0f);
+        host.set("rev_mix", 1.0f);
+        host.prepare(sampleRate, blockSize);
+
+        juce::AudioBuffer<float> buffer(2, blockSize);
+        juce::Random rng(55);
+        float peakMid = 0.0f, peakEnd = 0.0f, peakAll = 0.0f;
+        const int blocks = static_cast<int>(30.0 * sampleRate / blockSize);
+        for (int b = 0; b < blocks; ++b)
+        {
+            fillNoise(buffer, rng, 1.0f);
+            host.run(buffer);
+            check(allFinite(buffer, 8.0f), "the reverb must stay finite and below 8.0 at maximum decay and shimmer");
+            const float peak = buffer.getMagnitude(0, blockSize);
+            const double t = static_cast<double>(b) * blockSize / sampleRate;
+            peakAll = std::max(peakAll, peak);
+            if (t >= 10.0 && t < 15.0) peakMid = std::max(peakMid, peak);
+            if (t >= 25.0)             peakEnd = std::max(peakEnd, peak);
+        }
+        std::cout << "  -> 30 s of full-scale noise, decay 20 s, shimmer 1.0: peak " << peakAll
+                  << " (10-15 s: " << peakMid << ", 25-30 s: " << peakEnd << ")" << std::endl;
+        check(peakEnd < peakMid * 1.5f, "the level must not keep growing");
+    }
+
+    // --- Scenario: Mix at zero is dry ---
+    {
+        wvzz::modules::ReverbDSP reverb("rev");
+        ModuleTestHost host(reverb);
+        host.set("rev_mix", 0.0f);
+        host.prepare(sampleRate, blockSize);
+        juce::AudioBuffer<float> buffer(2, blockSize), input(2, blockSize);
+        juce::Random rng(2);
+        float worst = 0.0f;
+        for (int b = 0; b < 50; ++b)
+        {
+            fillNoise(buffer, rng, 0.5f);
+            input.makeCopyOf(buffer);
+            host.run(buffer);
+            worst = std::max(worst, maxAbsDiff(buffer, input));
+        }
+        std::cout << "  -> mix 0: max difference between output and input = " << worst << std::endl;
+        check(worst < 1.0e-7f, "with rev_mix at 0 the output must equal the input");
+    }
+
+    std::cout << "  -> PASS\n" << std::endl;
+}
+
+static void testReverbModesAndControls()
+{
+    std::cout << "[Reverb 3/6] Reverb: Hall vs Plate build-up, shimmer, pre-delay, damping, width, bypass tail, zero allocation..." << std::endl;
+    const double sampleRate = 48000.0;
+    const int blockSize = 512;
+
+    auto render = [&](std::function<void(ModuleTestHost&)> configure, const std::vector<float>& input,
+                      std::vector<float>& left, std::vector<float>& right) {
+        wvzz::modules::ReverbDSP reverb("rev");
+        ModuleTestHost host(reverb);
+        configureDryRoomlessReverb(host, 1, 2.0f, 0.5f);
+        configure(host);
+        host.prepare(sampleRate, blockSize);
+        renderThroughHost(host, input, left, &right);
+    };
+
+    std::vector<float> impulse(512 * 190, 0.0f);
+    impulse[0] = 1.0f;
+    std::vector<float> l, r;
+
+    // --- Scenario: Hall builds up more slowly than Plate (time until 10% of the energy has arrived) ---
+    auto timeToEnergy = [&](const std::vector<float>& x) {
+        double total = 0.0;
+        for (float v : x) total += static_cast<double>(v) * v;
+        double running = 0.0;
+        for (size_t n = 0; n < x.size(); ++n)
+        {
+            running += static_cast<double>(x[n]) * x[n];
+            if (running >= 0.1 * total)
+                return static_cast<double>(n) * 1000.0 / sampleRate;
+        }
+        return 0.0;
+    };
+    render([](ModuleTestHost& h) { h.set("rev_mode", 0.0f); }, impulse, l, r);
+    const double plateMs = timeToEnergy(l);
+    render([](ModuleTestHost& h) { h.set("rev_mode", 1.0f); }, impulse, l, r);
+    const double hallMs = timeToEnergy(l);
+    std::cout << "  -> time until 10% of the tail energy has arrived: Plate " << plateMs << " ms, Hall " << hallMs << " ms" << std::endl;
+    check(hallMs > plateMs * 1.5, "the Hall tail must build up later than the Plate tail");
+
+    // --- Scenario: Shimmer adds pitch-shifted energy (220 Hz burst, one octave up -> 440 Hz) ---
+    {
+        std::vector<float> tone = makeSine(512 * 280, sampleRate, 220.0f, 0.5f);
+        for (size_t n = 24000; n < tone.size(); ++n) // 0.5 s burst
+            tone[n] = 0.0f;
+        float level440[2] = { 0.0f, 0.0f };
+        for (int pass = 0; pass < 2; ++pass)
+        {
+            render([pass](ModuleTestHost& h) {
+                h.set("rev_mode", 2.0f);
+                h.set("rev_decay", 6.0f);
+                h.set("rev_shimmer", pass == 0 ? 0.0f : 1.0f);
+                h.set("rev_interval", 0.0f);
+            }, tone, l, r);
+            level440[pass] = toneLevel(l, 48000, 72000, 440.0f, sampleRate); // 1.0 .. 2.5 s
+        }
+        std::cout << "  -> level at 440 Hz in the tail of a 220 Hz burst: shimmer 0 -> " << level440[0]
+                  << ", shimmer 1 -> " << level440[1] << std::endl;
+        check(level440[1] > level440[0] * 5.0f && level440[1] > 1.0e-4f, "shimmer must add energy one octave above the input");
+    }
+
+    // --- Scenario: Pre-delay delays the tail (100 ms = 4800 samples of silence) ---
+    render([](ModuleTestHost& h) { h.set("rev_predelay", 100.0f); }, impulse, l, r);
+    float early = 0.0f, later = 0.0f;
+    for (size_t n = 1; n < 4790; ++n) early = std::max(early, std::abs(l[n]));
+    for (size_t n = 4800; n < 24000; ++n) later = std::max(later, std::abs(l[n]));
+    std::cout << "  -> pre-delay 100 ms: wet peak in the first 100 ms = " << early << ", in the next 400 ms = " << later << std::endl;
+    check(early < 1.0e-6f && later > 1.0e-3f, "the wet signal must be silent during the pre-delay");
+
+    // --- Scenario: High damping darkens the tail ---
+    const auto burst = noiseBurst(512 * 190, 4800, 0.5f, 3);
+    render([](ModuleTestHost& h) { h.set("rev_hidamp", 20000.0f); }, burst, l, r);
+    const float brightOpen = brightness(l, 24000, 24000);
+    render([](ModuleTestHost& h) { h.set("rev_hidamp", 1000.0f); }, burst, l, r);
+    const float brightDamped = brightness(l, 24000, 24000);
+    std::cout << "  -> tail brightness: high damp 20 kHz -> " << brightOpen << ", 1 kHz -> " << brightDamped << std::endl;
+    check(brightDamped < brightOpen * 0.3f, "high damping must darken the tail");
+
+    // Damping works per second, so the damped range decays about 3 times faster in every mode.
+    for (int mode : { 0, 1 })
+    {
+        // 6 kHz tone burst: far above a 1 kHz High Damp corner
+        std::vector<float> highTone = makeSine(512 * 190, sampleRate, 6000.0f, 0.5f);
+        for (size_t n = 0; n < highTone.size(); ++n)
+        {
+            // 0.2 s burst with 20 ms fades: a hard edge would add mid-range energy that decays more slowly
+            float gain = 0.0f;
+            if (n < 9600)
+                gain = std::min(1.0f, std::min(static_cast<float>(n), static_cast<float>(9600 - n)) / 960.0f);
+            highTone[n] *= gain;
+        }
+        render([mode](ModuleTestHost& h) { h.set("rev_mode", static_cast<float>(mode)); h.set("rev_decay", 3.0f); h.set("rev_hidamp", 1000.0f); }, highTone, l, r);
+        // A single tone gives a bumpy tail, so use the level drop over one full second (0.3 s to 1.3 s).
+        const float levelStart = 20.0f * std::log10(std::max(1.0e-12f, rmsOf(l, 14400, 4800)));
+        const float levelEnd   = 20.0f * std::log10(std::max(1.0e-12f, rmsOf(l, 62400, 4800)));
+        const float dampedDecay = 60.0f / std::max(1.0f, levelStart - levelEnd);
+        std::cout << "  -> " << wvzz::modules::getReverbModeNames()[mode] << ", decay 3 s, High Damp 1 kHz: a 6 kHz tone decays in "
+                  << dampedDecay << " s (model: 35% = 1.05 s)" << std::endl;
+        check(dampedDecay > 0.8f && dampedDecay < 1.4f, "fully damped highs must decay in about 35% of the decay time");
+    }
+
+    // --- Scenario: Width zero is mono ---
+    render([](ModuleTestHost& h) { h.set("rev_width", 0.0f); }, burst, l, r);
+    float monoDiff = 0.0f;
+    for (size_t n = 0; n < l.size(); ++n) monoDiff = std::max(monoDiff, std::abs(l[n] - r[n]));
+    render([](ModuleTestHost& h) { h.set("rev_width", 1.0f); }, burst, l, r);
+    float wideDiff = 0.0f;
+    for (size_t n = 0; n < l.size(); ++n) wideDiff = std::max(wideDiff, std::abs(l[n] - r[n]));
+    std::cout << "  -> largest left/right difference: width 0 -> " << monoDiff << ", width 1 -> " << wideDiff << std::endl;
+    check(monoDiff < 1.0e-6f && wideDiff > 0.01f, "width 0 must be mono and width 1 must be stereo");
+
+    // --- Scenario: Tail continues after bypass; no new reverb is created ---
+    {
+        wvzz::modules::ReverbDSP reverb("rev");
+        ModuleTestHost host(reverb);
+        host.set("rev_decay", 1.0f);
+        host.set("rev_mix", 0.5f);
+        host.prepare(sampleRate, blockSize);
+        juce::AudioBuffer<float> buffer(2, blockSize), input(2, blockSize);
+        juce::Random rng(8);
+        for (int b = 0; b < 20; ++b)
+        {
+            fillNoise(buffer, rng, 0.5f);
+            host.run(buffer);
+        }
+        host.set("rev_bypass", 1.0f);
+        float tailEarly = 0.0f, tailLate = 0.0f;
+        for (int b = 0; b < 400; ++b)
+        {
+            buffer.clear();
+            host.run(buffer);
+            if (b >= 5 && b < 30) tailEarly = std::max(tailEarly, buffer.getMagnitude(0, blockSize));
+            if (b >= 380)         tailLate  = std::max(tailLate,  buffer.getMagnitude(0, blockSize));
+        }
+        std::cout << "  -> after bypass: tail peak in the first 0.3 s = " << tailEarly << ", after 4 s = " << tailLate << std::endl;
+        check(tailEarly > 0.005f && tailLate < tailEarly * 0.001f, "the tail must keep playing after bypass and then decay");
+
+        float worst = 0.0f;
+        for (int b = 0; b < 60; ++b)
+        {
+            if (b < 10) fillNoise(buffer, rng, 0.5f); else buffer.clear();
+            input.makeCopyOf(buffer);
+            host.run(buffer);
+            worst = std::max(worst, maxAbsDiff(buffer, input));
+        }
+        check(worst < 2.0e-4f, "a bypassed reverb must output the input and create no new reverb");
+    }
+
+    // --- Zero allocation in every mode (with a mode switch and a reset), and prefixing ---
+    for (int mode = 0; mode < 3; ++mode)
+    {
+        wvzz::modules::ReverbDSP reverb("rev");
+        ModuleTestHost host(reverb);
+        host.set("rev_mode", static_cast<float>(mode));
+        host.set("rev_shimmer", 1.0f);
+        host.set("rev_mod", 1.0f);
+        host.prepare(sampleRate, blockSize);
+        juce::AudioBuffer<float> buffer(2, blockSize);
+        generateSineWave(buffer, sampleRate, 440.0f);
+        host.run(buffer);
+        g_allocationCount = 0;
+        g_trackingAllocations = true;
+        for (int b = 0; b < 1000; ++b)
+        {
+            generateSineWave(buffer, sampleRate, 440.0f);
+            if (b == 500)
+                reverb.reset();
+            host.run(buffer);
+        }
+        g_trackingAllocations = false;
+        if (g_allocationCount != 0)
+        {
+            std::cerr << "FAIL: reverb mode " << mode << " allocated " << g_allocationCount << " times while processing" << std::endl;
+            std::exit(1);
+        }
+        check(allFinite(buffer, 8.0f), "reverb output must stay finite");
+    }
+    std::cout << "  -> heap allocations in 1,000 blocks, each of the 3 modes: 0" << std::endl;
+    {
+        wvzz::modules::ReverbDSP reverb("slot2_rev");
+        ModuleTestHost host(reverb);
+        check(host.getAPVTS().getParameter("slot2_rev_decay") != nullptr && host.getAPVTS().getParameter("rev_decay") == nullptr,
+              "reverb parameter ids must use the instance prefix");
+    }
+
+    std::cout << "  -> PASS\n" << std::endl;
+}
+
+static void testWvZzReverbPlugin()
+{
+    std::cout << "[Reverb 4/6] Plugin: presets, history, state recall, tail length, modulation profile, zero allocation..." << std::endl;
+
+    wvzz::WvZzReverbAudioProcessor processor;
+    processor.prepareToPlay(48000.0, 512);
+    check(processor.getName() == "WvZz Reverb", "plugin name");
+
+    const auto& presets = wvzz::reverbfx::getFactoryPresets();
+    check(presets.size() == 10 && processor.getNumPrograms() == 10, "WvZz Reverb must have 10 factory presets");
+    check(processor.getCurrentProgram() == 0, "the plugin must start on program 0");
+
+    juce::AudioBuffer<float> buffer(2, 512);
+    juce::MidiBuffer midi;
+
+    // --- Scenario: All presets load and stay stable ---
+    for (int i = 0; i < 10; ++i)
+    {
+        processor.setCurrentProgram(i);
+        check(processor.getProgramName(i) == juce::String(presets[static_cast<size_t>(i)].name), "preset name mismatch");
+        for (const auto& [paramId, value] : presets[static_cast<size_t>(i)].values)
+        {
+            auto* param = dynamic_cast<juce::RangedAudioParameter*>(processor.getAPVTS().getParameter(paramId));
+            check(param != nullptr, paramId);
+            const float actual = param->convertFrom0to1(param->getValue());
+            if (std::abs(actual - value) > 0.02f * std::max(1.0f, std::abs(value)))
+            {
+                std::cerr << "FAIL: preset '" << presets[static_cast<size_t>(i)].name << "' " << paramId
+                          << " = " << actual << ", expected " << value << std::endl;
+                std::exit(1);
+            }
+        }
+        for (int b = 0; b < 200; ++b)
+        {
+            generateSineWave(buffer, 48000.0, 220.0f);
+            processor.processBlock(buffer, midi);
+            check(allFinite(buffer, 8.0f), "preset output must be finite");
+        }
+    }
+
+    // --- Scenario: Preset result is independent of history ---
+    auto snapshot = [&processor]() {
+        std::vector<float> values;
+        for (auto* param : processor.getParameters())
+            values.push_back(param->getValue());
+        return values;
+    };
+    processor.setCurrentProgram(0);
+    const auto direct = snapshot();
+    processor.setCurrentProgram(9);
+    processor.setCurrentProgram(0);
+    check(direct == snapshot(), "loading a preset must give the same parameter values whatever was loaded before");
+
+    // --- Session recall: parameters and the selected preset ---
+    {
+        processor.setCurrentProgram(7);
+        juce::MemoryBlock saved;
+        processor.getStateInformation(saved);
+        const auto savedValues = snapshot();
+        processor.setCurrentProgram(2);
+        processor.setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
+        check(processor.getCurrentProgram() == 7 && savedValues == snapshot(), "state recall must restore the parameters and the selected preset");
+    }
+
+    // --- Scenario: Tail follows the decay setting (decay 5 s, pre-delay 100 ms -> 5.1 .. 5.3 s) ---
+    auto& apvts = processor.getAPVTS();
+    resetPluginToDefaults(processor);
+    setPluginParam(apvts, "rev_decay", 5.0f);
+    setPluginParam(apvts, "rev_predelay", 100.0f);
+    const double tail = processor.getTailLengthSeconds();
+    std::cout << "  -> reported tail for decay 5 s + pre-delay 100 ms: " << tail << " s" << std::endl;
+    check(tail > 5.1 && tail < 5.3, "the tail length must be pre-delay + decay + early reflections");
+
+    // --- Early reflections reach the output through the reverb ---
+    {
+        float withEarly = 0.0f, withoutEarly = 0.0f;
+        for (int pass = 0; pass < 2; ++pass)
+        {
+            wvzz::WvZzReverbAudioProcessor p;
+            resetPluginToDefaults(p);
+            setPluginParam(p.getAPVTS(), "rev_predelay", 200.0f); // the tail starts after the window we look at
+            setPluginParam(p.getAPVTS(), "rev_mix", 1.0f);
+            setPluginParam(p.getAPVTS(), "er_level", 1.0f);
+            setPluginParam(p.getAPVTS(), "er_bypass", pass == 0 ? 0.0f : 1.0f);
+            p.prepareToPlay(48000.0, 512);
+            float peak = 0.0f;
+            for (int b = 0; b < 15; ++b) // 160 ms
+            {
+                buffer.clear();
+                if (b == 0) { buffer.setSample(0, 0, 1.0f); buffer.setSample(1, 0, 1.0f); }
+                p.processBlock(buffer, midi);
+                if (b > 0 || true)
+                    for (int i = (b == 0 ? 8 : 0); i < 512; ++i)
+                        peak = std::max(peak, std::abs(buffer.getSample(0, i)));
+            }
+            (pass == 0 ? withEarly : withoutEarly) = peak;
+        }
+        std::cout << "  -> wet peak in the first 160 ms (before the tail): early reflections on " << withEarly << ", off " << withoutEarly << std::endl;
+        check(withEarly > 0.05f && withoutEarly < 1.0e-5f, "early reflections must be heard before the tail, and only when they are on");
+    }
+
+    // --- Modulation profile: lists and LFO delivery to Reverb Mix ---
+    const auto& names = wvzz::modules::getModTargetNames(wvzz::ModProfile::Reverb);
+    check(names.size() == 15 && names[3] == "Decay" && names[10] == "Reverb Mix" && names[14] == "Master Vol", "Reverb profile must list None + 14 targets");
+    check(wvzz::modules::getModTargetNames(wvzz::ModProfile::Distortion).size() == 22
+          && wvzz::modules::getModTargetNames(wvzz::ModProfile::Dynamics).size() == 16
+          && wvzz::modules::getModTargetNames(wvzz::ModProfile::Modulation).size() == 15
+          && wvzz::modules::getModTargetNames(wvzz::ModProfile::Delay).size() == 14, "other profiles must keep their lists");
+    check(static_cast<int>(wvzz::ModTarget::GrainSpray) == 52 && static_cast<int>(wvzz::ModTarget::RevPredelay) == 53,
+          "existing ModTarget values must not move");
+    check(wvzz::modules::getModTargetForIndex(10, wvzz::ModProfile::Reverb) == wvzz::ModTarget::RevMix
+          && wvzz::modules::getModTargetForIndex(11, wvzz::ModProfile::Reverb) == wvzz::ModTarget::ErLevel, "Reverb profile index mapping");
+
+    setPluginParam(apvts, "lfo1_target", 10.0f);
+    setPluginParam(apvts, "lfo1_depth", 1.0f);
+    setPluginParam(apvts, "lfo1_rate", 5.0f);
+    bool sawOffset = false;
+    for (int b = 0; b < 10; ++b)
+    {
+        buffer.clear();
+        processor.processBlock(buffer, midi);
+        if (std::abs(processor.getModulationModule().getModulationDSP().getOffset(wvzz::ModTarget::RevMix)) > 0.01f)
+            sawOffset = true;
+    }
+    check(sawOffset, "LFO 1 must deliver a non-zero offset to the Reverb Mix target");
+
+    // --- Plugin zero allocation: plate preset and shimmer preset ---
+    for (int program : { 0, 7 })
+    {
+        processor.setCurrentProgram(program);
+        generateSineWave(buffer, 48000.0, 440.0f);
+        processor.processBlock(buffer, midi);
+        g_allocationCount = 0;
+        g_trackingAllocations = true;
+        for (int i = 0; i < 1000; ++i)
+        {
+            generateSineWave(buffer, 48000.0, 440.0f);
+            processor.processBlock(buffer, midi);
+        }
+        g_trackingAllocations = false;
+        if (g_allocationCount != 0)
+        {
+            std::cerr << "FAIL: WvZz Reverb preset " << program << " allocated " << g_allocationCount << " times on the audio thread" << std::endl;
+            std::exit(1);
+        }
+    }
+    std::cout << "  -> heap allocations in 1,000 processBlock() calls (plate preset, shimmer preset): 0" << std::endl;
+
+    std::cout << "  -> PASS\n" << std::endl;
+}
+
+static void testWvZzReverbEditorAndDecayDisplay()
+{
+    std::cout << "[Reverb 5/6] Editor at 1080x680, DECAY display, published decay state, curve functions..." << std::endl;
+
+    wvzz::WvZzReverbAudioProcessor processor;
+    processor.setCurrentProgram(4); // Concert Hall: decay 3.2 s, pre-delay 30 ms
+    processor.prepareToPlay(48000.0, 512);
+
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    check(editor != nullptr, "createEditor() returned null for WvZz Reverb");
+    editor->setSize(1080, 680);
+    check(editor->getWidth() == 1080 && editor->getHeight() == 680, "WvZz Reverb editor must be 1080x680");
+
+    std::function<int(juce::Component&)> countDisplays = [&countDisplays](juce::Component& c) {
+        int n = (dynamic_cast<wvzz::ui::ReverbDecayDisplayComponent*>(&c) != nullptr) ? 1 : 0;
+        for (auto* child : c.getChildren())
+            n += countDisplays(*child);
+        return n;
+    };
+    check(countDisplays(*editor) == 1, "WvZz Reverb editor must contain one decay-curve display");
+
+    juce::AudioBuffer<float> buffer(2, 512);
+    juce::MidiBuffer midi;
+    generateSineWave(buffer, 48000.0, 440.0f);
+    processor.processBlock(buffer, midi);
+    const auto& state = processor.getReverbModule().getReverbDSP().getDecayState();
+    check(state.active.load() && state.mode.load() == 1, "decay state must report an active Hall reverb for preset 5");
+    check(std::abs(state.decaySeconds.load() - 3.2f) < 0.02f && std::abs(state.predelayMs.load() - 30.0f) < 0.2f,
+          "decay state must carry decay and pre-delay");
+    check(state.earlyMs.load() > 50.0f && state.meanLineMs.load() > 60.0f, "decay state must carry the early pattern and the mean line length");
+
+    setPluginParam(processor.getAPVTS(), "rev_bypass", 1.0f);
+    processor.processBlock(buffer, midi);
+    check(!state.active.load(), "a bypassed reverb must publish an inactive decay state");
+
+    // --- Scenario: Curve follows the decay setting ---
+    using Display = wvzz::ui::ReverbDecayDisplayComponent;
+    check(Display::decayDbAt(0.05f, 0.1f, 2.0f) < -99.0f, "before the pre-delay the curve must be silent");
+    check(std::abs(Display::decayDbAt(0.1f, 0.1f, 2.0f)) < 1.0e-4f, "the tail must start at 0 dB at the pre-delay time");
+    check(std::abs(Display::decayDbAt(2.1f, 0.1f, 2.0f) + 60.0f) < 1.0e-3f, "the mid line must reach -60 dB at pre-delay + decay");
+
+    // --- Scenario: Damping bends the low and high lines ---
+    const float full = wvzz::modules::ReverbDSP::fullDampingDbPerSecond(2.0f); // decay 2 s -> 55.7 dB/s extra
+    check(std::abs(full - (60.0f / 0.7f - 30.0f)) < 1.0e-3f, "fully damped frequencies must decay in 35% of the decay time");
+    const float highFar  = Display::dampingDbPerSecond(8000.0f, 1000.0f, full, false);  // far above the corner
+    const float highNear = Display::dampingDbPerSecond(8000.0f, 16000.0f, full, false); // below the corner
+    const float lowFar   = Display::dampingDbPerSecond(100.0f, 800.0f, full, true);
+    check(highFar > full * 0.95f && highNear < full * 0.25f && lowFar > full * 0.95f, "damping must act on the range beyond the corner frequency");
+    check(Display::decayDbAt(1.0f, 0.0f, 2.0f, highFar) < Display::decayDbAt(1.0f, 0.0f, 2.0f), "the high line must fall faster than the mid line");
+
+    std::cout << "  -> PASS\n" << std::endl;
+}
+
+static void testBundleHasFivePlugins()
+{
+    std::cout << "[Reverb 6/6] Bundle: five plugins, unique names, editors open at 1080x680..." << std::endl;
+
+    std::vector<std::unique_ptr<juce::AudioProcessor>> plugins;
+    plugins.push_back(std::make_unique<wvzz::WvZzDistortionAudioProcessor>());
+    plugins.push_back(std::make_unique<wvzz::WvZzDynamicsAudioProcessor>());
+    plugins.push_back(std::make_unique<wvzz::WvZzModulationAudioProcessor>());
+    plugins.push_back(std::make_unique<wvzz::WvZzDelayAudioProcessor>());
+    plugins.push_back(std::make_unique<wvzz::WvZzReverbAudioProcessor>());
+
+    juce::StringArray names;
+    for (auto& plugin : plugins)
+    {
+        names.addIfNotAlreadyThere(plugin->getName());
+        plugin->prepareToPlay(48000.0, 512);
+        std::unique_ptr<juce::AudioProcessorEditor> editor(plugin->createEditor());
+        check(editor != nullptr, "every plugin must open an editor");
+        editor->setSize(1080, 680);
+        check(editor->getWidth() == 1080 && editor->getHeight() == 680, "every editor must use the 1080x680 shell");
+    }
+    std::cout << "  -> " << names.joinIntoString(", ") << std::endl;
+    check(names.size() == 5, "the bundle must hold five plugins with different names");
+
+    std::cout << "  -> PASS\n" << std::endl;
+}
+
 int main(int, char*[])
 {
     std::cout << "=====================================================" << std::endl;
@@ -2944,8 +3687,16 @@ int main(int, char*[])
         testWvZzDelayPlugin();
         testWvZzDelayEditorAndTaps();
 
+        // Reverb suites
+        testEarlyReflectionsModule();
+        testReverbDecayAndStability();
+        testReverbModesAndControls();
+        testWvZzReverbPlugin();
+        testWvZzReverbEditorAndDecayDisplay();
+        testBundleHasFivePlugins();
+
         std::cout << "=====================================================" << std::endl;
-        std::cout << "   ALL 34 DSP SUITES PASSED (100% SUCCESS)           " << std::endl;
+        std::cout << "   ALL 40 DSP SUITES PASSED (100% SUCCESS)           " << std::endl;
         std::cout << "=====================================================" << std::endl;
         return 0;
     }
