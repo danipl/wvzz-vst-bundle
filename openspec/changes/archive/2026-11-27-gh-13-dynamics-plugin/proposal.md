@@ -8,7 +8,8 @@ WvZz Dynamics is coded in commit `728b5d2`, but that commit is only on the branc
 
 - Cherry-pick `728b5d2` onto a branch cut from fresh `main`. The trees of `02077e9` and `29964cf` are identical, so no conflict is expected.
 - Add `Plugins/WvZzDynamics/README.md` and `Plugins/WvZzDynamics/USER_MANUAL.md`, with the same structure as the Distortion docs. Parameter names, ranges, and the factory presets come from the module code.
-- Update the root `README.md`: the WvZz Dynamics roadmap row shows it as available, and a plugin section describes it.
+- Update the root `README.md`: the WvZz Dynamics roadmap row shows it as available, and a plugin section describes it. Update the same roadmap row in `Plugins/WvZzDistortion/README.md`.
+- Correct the `dynamics-dsp-engine` spec where it differs from the code (ticket scope: "the spec matches the code").
 
 ### Out of Scope
 
@@ -23,7 +24,9 @@ None.
 
 ### Modified Capabilities
 
-None. The Dynamics requirements are already written: commit `728b5d2` carries the archived change `2026-11-07-add-wvzz-dynamics-plugin` and its synced living specs (`dynamics-dsp-engine` and 7 others). This change adds only docs, so `.openspec.yaml` sets `skip_specs: true`.
+- `dynamics-dsp-engine`: two requirements name parameter ids and ranges that differ from the code. The spec is corrected to the code, with no DSP change: `trans_attack` / `trans_sustain` are `-1.0 to +1.0` (not dB), `trans_gate` is `-80 to 0 dB` (not `-90 to -12 dB`), and the sheen parameter id is `ott_sheen` (not `ott_high_sheen`).
+
+The other Dynamics requirements arrive unchanged with commit `728b5d2` (archived change `2026-11-07-add-wvzz-dynamics-plugin`).
 
 ## Impact
 
