@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.5.0](https://github.com/danipl/wvzz-vst-bundle/compare/v0.4.0...v0.5.0) (2026-11-28)
+
+
+### Features
+
+* **delay:** add WvZz Delay plugin (clean, tape, BBD, granular) ([#22](https://github.com/danipl/wvzz-vst-bundle/issues/22)) ([3c67fd2](https://github.com/danipl/wvzz-vst-bundle/commit/3c67fd252a4d28e4dee94daa33f97608e7fdb185))
+* **dynamics:** add WvZz Dynamics plugin with docs ([#18](https://github.com/danipl/wvzz-vst-bundle/issues/18)) ([b1d24de](https://github.com/danipl/wvzz-vst-bundle/commit/b1d24de667e54851366cb0c19c2941ce89846600))
+* **modulation:** add WvZz Modulation plugin (chorus, phaser, flanger, tremolo) ([#20](https://github.com/danipl/wvzz-vst-bundle/issues/20)) ([703108d](https://github.com/danipl/wvzz-vst-bundle/commit/703108d9ff36cb6e12d7566f47beff5920ec49ac))
+* **reverb:** add WvZz Reverb plugin (plate, hall, shimmer) ([#23](https://github.com/danipl/wvzz-vst-bundle/issues/23)) ([1fa58c7](https://github.com/danipl/wvzz-vst-bundle/commit/1fa58c7729f2220594028806094104abe95bca02))
+
+
+### Bug Fixes
+
+* enforce test checks, mono bass, Dynamics presets and DICE, saved preset index ([#24](https://github.com/danipl/wvzz-vst-bundle/issues/24)) ([252863c](https://github.com/danipl/wvzz-vst-bundle/commit/252863c76a63b080aec542cebc42c29970c3fa5f))
+* **standalone:** update JUCE to 8.0.15 to fix the CoreAudio buffer overflow crash ([#25](https://github.com/danipl/wvzz-vst-bundle/issues/25)) ([4cd5d07](https://github.com/danipl/wvzz-vst-bundle/commit/4cd5d0713ead61dce176e1e024ca75fbb8e95774))
+
 ## [0.4.0](https://github.com/danipl/wvzz-vst-bundle/compare/v0.3.0...v0.4.0) (2026-11-07)
 
 
