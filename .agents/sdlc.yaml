@@ -1,0 +1,87 @@
+# .agents/sdlc.yaml — project settings for the gsdlc-* skills.
+# Detected from git, AGENTS.md, Makefile, and .github/ on 2026-11-27. JUCE and repo facts may change; re-check before relying on them.
+version: 1
+
+project:
+  name: "WvZz Audio Plugin Suite"
+  summary: >
+    Modular macOS audio plugin bundle (VST3 + Standalone, Universal Binary) and shared
+    DSP library (WvZzModules), written in C++20 with JUCE 8. Users are music producers.
+  roles: [producer]
+  artifact_language: "English"
+
+repo:
+  host: github
+  slug: "danipl/wvzz-vst-bundle"
+  remote: origin
+  default_branch: main
+  # AGENTS.md section 5: <type>/<kebab-case-description>. The ticket id is added so a later session can find the branch.
+  branch_pattern: "{type}/{id}-{slug}"
+  branch_types: [feat, fix, docs, refactor, test, ci, chore]
+  # Conventional Commits (release-please). {ID} goes in the body or PR, not the subject.
+  commit_pattern: "{summary}"
+  pr_title_pattern: "{title}"
+  pr_template: ".github/PULL_REQUEST_TEMPLATE.md"
+  merge_method: squash
+  delete_branch_on_merge: true
+
+tracker:
+  type: github
+  key_prefix: "GH"
+  issue_url: "https://github.com/danipl/wvzz-vst-bundle/issues/{n}"
+  github:
+    repo: "danipl/wvzz-vst-bundle"
+    epic_label: "epic"
+    type_labels: { bug: "bug", feature: "enhancement", task: "task" }
+    priority_labels: {}
+    stage_mode: none
+    use_sub_issues: true
+
+adr:
+  location: none
+
+openspec:
+  enabled: true
+  root: "openspec"
+  change_name: "{id}-{slug}"
+  key_specs:
+    dsp: dsp-engine
+    architecture: modular-architecture
+    host: plugin-host-integration
+    ui: plugin-ui-system
+    visualizer: signal-comparison-visualizer
+    cicd: cicd-release-pipeline
+
+layers:
+  - { code: BUILD,  desc: "CMakeLists.txt, Makefile, CI workflows" }
+  - { code: DSP,    desc: "Source/Modules/** headless DSP modules" }
+  - { code: PLUGIN, desc: "Plugins/** processors, presets, parameter layout" }
+  - { code: UI,     desc: "Source/UI/** and module views, editors" }
+  - { code: TEST,   desc: "Tests/DSPTests.cpp" }
+  - { code: DOCS,   desc: "README, plugin README / USER_MANUAL, specs" }
+
+commands:
+  format: ""
+  lint: []
+  typecheck: []
+  test: ["make build", "make test", "make package", "openspec validate --all"]
+
+delegates: []
+
+rules:
+  invariants:
+    - "No heap allocation, no locks, and noexcept in every method called on the audio thread."
+    - "DSP modules (IDSPModule) never include GUI headers or know about IModuleView."
+    - "Every module parameter id uses the configurable instancePrefix."
+    - "Targets are macOS Universal Binary (arm64 + x86_64) VST3 and Standalone only; bundles pass codesign --verify --deep --strict."
+    - "Never hand-edit the CMakeLists.txt VERSION line, CHANGELOG.md, .release-please-manifest.json, or the README version badge."
+    - "Commit subjects and PR titles follow Conventional Commits."
+    - "The OpenSpec change is archived before the PR merges (CI rejects active changes)."
+
+# Releases are made by release-please, not by the gsdlc-release skill:
+# every push to main updates a release PR ("chore(main): release x.y.z"). Merging that PR creates the
+# vX.Y.Z tag and GitHub release, and .github/workflows/release.yml builds and uploads the bundles.
+# release-please.yml has no workflow_dispatch trigger, so there is nothing to dispatch.
+release:
+  enabled: false
+  tag_pattern: "vsemver"
